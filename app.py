@@ -1101,41 +1101,29 @@ def api_post_photo(page_id):
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
     """
-    Updated v3:
-    - Accepts optional page_id to auto-load per-page settings.
-    - Fallback: request body -> settings[page_id] -> defaults.
-    - Enforces exact structure (no markdown link).
+    Updated v2: Enforce exact post structure like screenshot.
+    - Model returns ONLY: body (2–3 sentences) + 3–5 bullets, separated by a line "---".
+    - Server assembles: Title, keyword+link line, body, bullets (with heading),
+      contacts block, and 12 hashtags built from keyword variants.
     """
     if not OPENAI_API_KEY:
         return jsonify({"error": "NO_OPENAI_API_KEY"}), 400
 
     body = request.get_json(force=True)
-    page_id = (body.get("page_id") or "").strip()
-
-    # Load settings if page_id provided
-    cfg = {}
-    try:
-        if page_id:
-            cfg = load_page_settings().get(page_id, {}) or {}
-    except Exception:
-        cfg = {}
-
     tone = (body.get("tone") or "chuyên nghiệp").strip()
     length = (body.get("length") or "vừa").strip()
-
-    # Fallback order: body -> settings -> defaults
-    keyword = (body.get("keyword") or cfg.get("keyword") or "MB66").strip()
-    link = _normalize_link((body.get("link") or cfg.get("link") or "").strip())
-    phone = (body.get("phone") or cfg.get("phone") or cfg.get("zalo") or "").strip()
-    telegram = (body.get("telegram") or cfg.get("telegram") or "").strip()
+    keyword = (body.get("keyword") or "MB66").strip()
+    link = _normalize_link((body.get("link") or "").strip())
+    phone = (body.get("phone") or "").strip()
+    telegram = (body.get("telegram") or "").strip()
     extra_prompt = (body.get("prompt") or "").strip()
 
-    # Prompt for model: only body and bullets separated by '---'
+    # Build prompt for model: only produce body and bullets, separated by '---'
     user_prompt = f"""
 Viết nội dung fanpage bằng tiếng Việt.
 Chỉ tạo HAI PHẦN theo thứ tự:
-(1) Thân bài 2–3 câu (90–130 từ toàn bài, tránh lặp “truy cập link chính thức” quá 2 lần).
-(2) 3–5 gạch đầu dòng lợi ích/ưu điểm.
+(1) Thân bài 2–3 câu (90–130 từ toàn bài tổng thể, tránh lặp “truy cập link chính thức” quá 2 lần).
+(2) 3–5 gạch đầu dòng liệt kê lợi ích/ưu điểm.
 Ngăn cách (1) và (2) bằng một dòng duy nhất: ---
 
 Ghi nhớ:
@@ -1192,40 +1180,23 @@ Ghi nhớ:
                 "Hỗ trợ 24/7, quy trình đơn giản."
             ]
 
-        # Hashtag helpers
+        # Build hashtags (12)
         def strip_diacritics(s):
             return "".join(ch for ch in unicodedata.normalize("NFD", s) if unicodedata.category(ch) != "Mn")
-        def compact(s): return s.replace(" ", "")
-
         kw_raw = keyword.strip()
-        kw_compact = compact(kw_raw)
-        kw_flat = compact(strip_diacritics(kw_raw))
-
-        # Build 12 hashtags max, no spaces
+        kw_flat = strip_diacritics(kw_raw).replace(" ", "")
+        kw_compact = kw_raw.replace(" ", "")
         hashtags = [
             f"#{kw_raw}", f"#{kw_compact}", f"#{kw_raw}ChinhThuc", f"#{kw_flat}Official",
             f"#{kw_compact}UyTin", f"#{kw_compact}AnToan", f"#{kw_compact}MoiNhat",
             f"#{kw_compact}KhongBiChan", f"#{kw_compact}Online", f"#{kw_compact}Support",
             f"#{kw_compact}VietNam", f"#{kw_compact}Safe"
         ]
-        # Remove spaces inside any accidental tags and dedup
-        hashtags = [h.replace(" ", "") for h in hashtags if h.strip("#")]
-        hashtags = list(dict.fromkeys(hashtags))[:15]
-        hashtags_line = " ".join(hashtags)
+        hashtags_line = " ".join(dict.fromkeys(hashtags))  # remove any accidental duplicates, preserve order
 
-        # Assemble final
+        # Assemble final text exactly like the screenshot structure
         title = f"🌟 Truy Cập Link {keyword} Chính Thức - Không Bị Chặn 🌟"
         second = f"#{kw_raw} 🔗 {link or '(chưa có link)'}"
-        contact = ""
-        if phone or telegram:
-            contact += "Thông tin liên hệ hỗ trợ:
-
-"
-            if phone: contact += f"SĐT: {phone}
-"
-            if telegram: contact += f"Telegram: {telegram}
-"
-
         final = (
             f"{title}
 "
@@ -1241,14 +1212,20 @@ Ghi nhớ:
 ".join(f"- {l}" for l in lines[:5]) + "
 
 " +
-            (contact if contact else "") +
+            "Thông tin liên hệ hỗ trợ:
+
+" +
+            (f"SĐT: {phone}
+" if phone else "") +
+            (f"Telegram: {telegram}
+" if telegram else "") +
             "
 Hashtags:
 " +
             hashtags_line
         ).strip()
 
-        return jsonify({"text": final, "used_settings_from_page": bool(page_id and cfg)}), 200
+        return jsonify({"text": final}), 200
     except Exception as e:
         return jsonify({"error": "OPENAI_EXCEPTION", "detail": str(e)}), 500
 #{keyword} #{keyword.replace(' ','')}AnToan"""
