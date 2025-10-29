@@ -1136,7 +1136,7 @@ Hãy viết 1 bài duy nhất cho fanpage có từ khóa chính là "{keyword}".
 Cấu trúc bài viết gồm:
 1️⃣ Dòng mở đầu có emoji (🌟 ⚡ 💫 🚀 🌐 …) và chứa từ khóa "{keyword}".
 2️⃣ Dòng tiếp theo hiển thị link chính thức, đúng cú pháp:
-   {kw_tag_lower} link chính thức 🔗 {link}
+   {kw_tag_lower} link chính thức không bị chặn 🔗 {link}
 3️⃣ Viết 2–3 câu mô tả hấp dẫn, rõ ràng, nêu lợi ích khi truy cập link chính thức (an toàn, không bị chặn, giao dịch nhanh, ổn định).
 4️⃣ Thêm đoạn **“Thông tin quan trọng”** gồm 3–5 gạch đầu dòng (ưu điểm, tốc độ, hỗ trợ, bảo mật…).
 5️⃣ Thêm **Thông tin liên hệ:**
@@ -1146,7 +1146,7 @@ Cấu trúc bài viết gồm:
    #{keyword_no_space} #LinkChínhThức{keyword_no_space} #{keyword_no_space}AnToàn #HỗTrợLấyLạiTiền{keyword_no_space} #RútTiền{keyword_no_space} #MởKhóaTàiKhoản{keyword_no_space}
 
 Yêu cầu:
-- Giọng văn {tone}, tự nhiên, không spam.
+- Giọng văn {tone}, tự nhiên,khẳng đinh không spam.
 - Bài dài khoảng 90–130 từ.
 - Không lặp lại cụm “truy cập link chính thức” quá 2 lần.
 - Không tạo thêm nhiều bài — chỉ viết 1 bài duy nhất.
