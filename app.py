@@ -366,6 +366,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <div class="card">
           <h3>Fanpage</h3>
           <div class="list" id="pages"></div>
+          <div class="toolbar" style="margin-top:8px"><label><input type="checkbox" id="pages_select_all"/> Chọn tất cả</label></div>
           <div class="status" id="pages_status" ></div>
         </div>
         <div class="card" style="margin-top:12px">
@@ -445,6 +446,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <h3>Chọn Page (đa chọn)</h3>
           <div id="inbox_pages" class="list"></div>
           <div class="toolbar" style="margin-top:8px">
+            <label><input type="checkbox" id="inbox_pages_select_all" /> Chọn tất cả</label>
             <label><input type="checkbox" id="inbox_only_unread" /> Chỉ chưa đọc</label>
             <button class="btn" id="btn_inbox_refresh">Tải hội thoại</button>
           </div>
@@ -513,6 +515,20 @@ function selectedPageIds(){
 }
 
 
+
+// ==== Helpers: select all ====
+function toggleAll(selector, checked){
+  document.querySelectorAll(selector).forEach(el => { el.checked = checked; el.dispatchEvent(new Event('change')); });
+}
+document.addEventListener('change', (ev)=>{
+  if(ev.target && ev.target.id==='pages_select_all'){
+    toggleAll('.pg', ev.target.checked);
+    if(document.querySelector('#perpage_toggle')?.checked){ renderPerPageEditors(); }
+  }
+  if(ev.target && ev.target.id==='inbox_pages_select_all'){
+    toggleAll('.pg-inbox', ev.target.checked);
+  }
+});
 // ==== Inbox (multi-page, unread filter) ====
 async function loadInboxPages(){
   const box = document.querySelector('#inbox_pages');
