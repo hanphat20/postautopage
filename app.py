@@ -392,6 +392,28 @@ INDEX_HTML = r"""<!DOCTYPE html>
   justify-self: end;
 }
 
+
+/* === STRONG OVERRIDE for fanpage/inbox rows === */
+#pages .item, #inbox_pages .item{
+  display: grid !important;
+  grid-template-columns: 1fr 32px !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+#pages .item label, #inbox_pages .item label{
+  position: static !important;
+  padding-right: 0 !important;
+  overflow: hidden !important;
+}
+#pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"]{
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+  justify-self: end !important;
+}
+
 </style>
 </head>
 <body>
