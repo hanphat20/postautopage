@@ -1101,19 +1101,16 @@ def api_post_photo(page_id):
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
     """
-    Updated: standardized Fanpage post prompt.
-    Accepts JSON body with fields:
-      - keyword (str), link (str), phone (str), telegram (str)
-      - tone (str: "thân thiện" | "chuyên nghiệp" | "hài hước")
-      - length (str: "ngắn" | "vừa" | "dài")
-      - prompt (optional str)
-    Returns JSON: { "text": "<final post text>" }
+    Updated v2: Enforce exact post structure like screenshot.
+    - Model returns ONLY: body (2–3 sentences) + 3–5 bullets, separated by a line "---".
+    - Server assembles: Title, keyword+link line, body, bullets (with heading),
+      contacts block, and 12 hashtags built from keyword variants.
     """
     if not OPENAI_API_KEY:
         return jsonify({"error": "NO_OPENAI_API_KEY"}), 400
 
     body = request.get_json(force=True)
-    tone = (body.get("tone") or "thân thiện").strip()
+    tone = (body.get("tone") or "chuyên nghiệp").strip()
     length = (body.get("length") or "vừa").strip()
     keyword = (body.get("keyword") or "MB66").strip()
     link = _normalize_link((body.get("link") or "").strip())
@@ -1121,36 +1118,25 @@ def api_ai_generate():
     telegram = (body.get("telegram") or "").strip()
     extra_prompt = (body.get("prompt") or "").strip()
 
-    # Build the standardized prompt per user's requested structure
+    # Build prompt for model: only produce body and bullets, separated by '---'
     user_prompt = f"""
-Bạn là chuyên gia viết nội dung fanpage mạng xã hội.
+Viết nội dung fanpage bằng tiếng Việt.
+Chỉ tạo HAI PHẦN theo thứ tự:
+(1) Thân bài 2–3 câu (90–130 từ toàn bài tổng thể, tránh lặp “truy cập link chính thức” quá 2 lần).
+(2) 3–5 gạch đầu dòng liệt kê lợi ích/ưu điểm.
+Ngăn cách (1) và (2) bằng một dòng duy nhất: ---
 
-Hãy viết 1 bài duy nhất cho fanpage có từ khóa chính là "{keyword}".
-
-Cấu trúc bài viết gồm:
-1️⃣ Dòng mở đầu có emoji (🌟 ⚡ 💫 🚀 🌐 …) và chứa từ khóa "{keyword}".
-2️⃣ Dòng tiếp theo hiển thị link chính thức:
-   🔗 {link}
-3️⃣ Viết 2–3 câu mô tả hấp dẫn, rõ ràng, nêu lợi ích khi truy cập link chính thức (an toàn, không bị chặn, giao dịch nhanh, ổn định).
-4️⃣ Thêm đoạn **“Thông tin quan trọng”** gồm 3–5 gạch đầu dòng (ưu điểm, tốc độ, hỗ trợ, bảo mật…).
-5️⃣ Thêm **Thông tin liên hệ:**
-   📞 {phone}
-   💬 Telegram: {telegram}
-6️⃣ Kết bài bằng **Hashtag** gồm 10–15 hashtag chứa từ khóa "{keyword}" và biến thể (có dấu/không dấu).
-
-Yêu cầu:
+Ghi nhớ:
+- Không viết tiêu đề, không ghi link, không viết thông tin liên hệ, không viết hashtag.
 - Giọng văn {tone}, tự nhiên, không spam.
-- Bài dài khoảng 90–130 từ.
-- Không lặp lại cụm “truy cập link chính thức” quá 2 lần.
-- Không tạo thêm nhiều bài — chỉ viết 1 bài duy nhất.
-- Nội dung đảm bảo không đạo văn trùng lặp với người khác.
+- Chủ đề/từ khoá chính: "{keyword}".
 {("Gợi ý thêm: " + extra_prompt) if extra_prompt else ""}
-    """.strip()
+""".strip()
 
     sys = (
         "Bạn là chuyên gia copywriting mạng xã hội tiếng Việt. "
         f"Giọng {tone}, độ dài {length}. "
-        "Chỉ trả về đúng 1 bài hoàn chỉnh theo cấu trúc đã nêu."
+        "Chỉ trả về phần THÂN BÀI và danh sách GẠCH ĐẦU DÒNG, cách nhau bởi một dòng '---'."
     )
 
     try:
@@ -1172,8 +1158,74 @@ Yêu cầu:
                 return jsonify({"error": "OPENAI_ERROR", "detail": r.text}), r.status_code
 
         data = r.json()
-        text = (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
-        return jsonify({"text": text}), 200
+        raw = (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+
+        # Split body and bullets by '---'
+        body_text, bullets_text = raw, ""
+        if "
+---
+" in raw:
+            parts = raw.split("
+---
+", 1)
+            body_text = parts[0].strip()
+            bullets_text = parts[1].strip()
+
+        # Clean bullet lines
+        lines = [l.strip().lstrip("-•* ").rstrip() for l in bullets_text.splitlines() if l.strip()]
+        if not lines:
+            lines = [
+                "Truy cập an toàn, không bị chặn.",
+                "Tốc độ nhanh và ổn định.",
+                "Hỗ trợ 24/7, quy trình đơn giản."
+            ]
+
+        # Build hashtags (12)
+        def strip_diacritics(s):
+            return "".join(ch for ch in unicodedata.normalize("NFD", s) if unicodedata.category(ch) != "Mn")
+        kw_raw = keyword.strip()
+        kw_flat = strip_diacritics(kw_raw).replace(" ", "")
+        kw_compact = kw_raw.replace(" ", "")
+        hashtags = [
+            f"#{kw_raw}", f"#{kw_compact}", f"#{kw_raw}ChinhThuc", f"#{kw_flat}Official",
+            f"#{kw_compact}UyTin", f"#{kw_compact}AnToan", f"#{kw_compact}MoiNhat",
+            f"#{kw_compact}KhongBiChan", f"#{kw_compact}Online", f"#{kw_compact}Support",
+            f"#{kw_compact}VietNam", f"#{kw_compact}Safe"
+        ]
+        hashtags_line = " ".join(dict.fromkeys(hashtags))  # remove any accidental duplicates, preserve order
+
+        # Assemble final text exactly like the screenshot structure
+        title = f"🌟 Truy Cập Link {keyword} Chính Thức - Không Bị Chặn 🌟"
+        second = f"#{kw_raw} 🔗 {link or '(chưa có link)'}"
+        final = (
+            f"{title}
+"
+            f"{second}
+"
+            f"{body_text}
+
+"
+            f"Thông tin quan trọng:
+
+" +
+            "
+".join(f"- {l}" for l in lines[:5]) + "
+
+" +
+            "Thông tin liên hệ hỗ trợ:
+
+" +
+            (f"SĐT: {phone}
+" if phone else "") +
+            (f"Telegram: {telegram}
+" if telegram else "") +
+            "
+Hashtags:
+" +
+            hashtags_line
+        ).strip()
+
+        return jsonify({"text": final}), 200
     except Exception as e:
         return jsonify({"error": "OPENAI_EXCEPTION", "detail": str(e)}), 500
 #{keyword} #{keyword.replace(' ','')}AnToan"""
