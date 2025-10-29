@@ -431,6 +431,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <div class="card">
           <h3>Fanpage</h3>
           <div class="list" id="pages"></div>
+          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px"><label><input type="checkbox" id="pages_select_all"/> Chọn tất cả</label></div>
           <div class="status" id="pages_status" ></div>
         </div>
@@ -457,6 +458,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
               <option value="dài">Dài</option>
             </select>
           </div>
+          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px">
             <button class="btn" id="btn_ai">Tạo nội dung</button>
             <button class="btn" id="btn_ai_use_settings">Dùng cài đặt page → chèn</button>
@@ -486,6 +488,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
             <input type="file" id="photo_input" accept="image/*"/>
             <input type="text" id="media_caption" placeholder="Caption (tuỳ chọn)"/>
           </div>
+          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px">
             <button class="btn primary" id="btn_publish">Đăng</button>
             <button class="btn" id="btn_auto_post" style="margin-left:8px">Tự viết & đăng (ảnh + bài)</button>
@@ -495,6 +498,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
             <div class="muted" id="post_progress_text">Đang đăng...</div>
             <div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;margin-top:6px"><div id="post_progress_bar" style="height:6px;width:0%"></div></div>
           </div>
+          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px">
             <button class="btn" id="btn_export_results" disabled>Tải kết quả (.xlsx)</button>
           </div>
@@ -510,6 +514,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <div class="card">
           <h3>Chọn Page (đa chọn)</h3>
           <div id="inbox_pages" class="list"></div>
+          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px">
             <label><input type="checkbox" id="inbox_pages_select_all" /> Chọn tất cả</label>
             <label><input type="checkbox" id="inbox_only_unread" /> Chỉ chưa đọc</label>
@@ -540,6 +545,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
             <input id="settings_zalo" placeholder="Zalo (số/username)"/>
             <input id="settings_telegram" placeholder="Telegram (username @...)"/>
           </div>
+          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px">
             <button class="btn primary" id="btn_save_settings">Lưu cài đặt</button>
           </div>
@@ -704,7 +710,7 @@ async function loadSettingsSavedList(){
     entries.sort((a,b)=> (nameById[a[0]]||a[0]).localeCompare(nameById[b[0]]||b[0], 'vi', {sensitivity:'base'}));
     box.innerHTML = entries.map(([pid, cfg])=>{
       const name = nameById[pid] || pid;
-      const kw = (cfg.keyword||''); const link=(cfg.link||''); const zalo=(cfg.zalo||''); const telegram=(cfg.telegram||'');
+      const kw = (cfg.keyword||''); const link=(cfg.link||''); const zalo=(cfg.zalo||''); const telegram=(cfg.telegram||''); const prompt=(cfg.prompt||'');
       return `<div class="item saved-row">
         <div class="grid">
           <div><strong>${name}</strong><div class="meta">${pid}</div></div>
@@ -712,6 +718,7 @@ async function loadSettingsSavedList(){
           <input id="sv_link_${pid}" value="${link}"/>
           <input id="sv_zalo_${pid}" value="${zalo}"/>
           <input id="sv_tg_${pid}" value="${telegram}"/>
+          <textarea id="sv_prompt_${pid}" rows="3" placeholder="Prompt viết bài (tuỳ chọn)">${prompt}</textarea>
         </div>
         <div class="toolbar" style="margin-top:6px">
           <button class="btn" onclick="saveSettingsRow('${pid}')">Lưu</button>
@@ -729,8 +736,9 @@ async function saveSettingsRow(pid){
   const link = (document.querySelector('#sv_link_'+pid)?.value||'').trim();
   const zalo = (document.querySelector('#sv_zalo_'+pid)?.value||'').trim();
   const telegram = (document.querySelector('#sv_tg_'+pid)?.value||'').trim();
+  const prompt = (document.querySelector('#sv_prompt_'+pid)?.value||'').trim();
   try{
-    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword: kw, link, zalo, telegram})});
+    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword: kw, link, zalo, telegram, prompt})});
     const d = await r.json();
     if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
     st.textContent='Đã lưu cho '+pid;
@@ -873,8 +881,9 @@ $('#btn_ai_use_settings').onclick = async () => {
     const link = cfg.link || '';
     $('#ai_keyword').value = keyword;
     $('#ai_link').value = link;
+    if(cfg.prompt){ $('#ai_prompt').value = cfg.prompt; }
     $('#ai_status').textContent='Đã lấy cài đặt từ page '+pid+'. Đang tạo nội dung...';
-    const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tone: $('#ai_tone').value, length: $('#ai_length').value, keyword, link, prompt: 'Sinh nội dung theo cài đặt page.'})});
+    const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tone: $('#ai_tone').value, length: $('#ai_length').value, keyword, link, prompt: (cfg.prompt || 'Sinh nội dung theo cài đặt page.')})});
     const d = await r.json();
     if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
     $('#post_text').value = d.text || '';
@@ -941,10 +950,11 @@ $('#btn_save_settings').onclick = async () => {
   const pid = $('#settings_page').value;
   const keyword = ($('#settings_keyword').value||'').trim();
   let link = ($('#settings_link').value||'').trim();
+  const prompt = ($('#settings_prompt').value||'').trim();
   const st = $('#settings_status');
   if(!pid){ st.textContent='Chưa chọn page'; return; }
   try{
-    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword, link})});
+    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword, link, prompt})});
     const d = await r.json();
     if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
     st.textContent='Đã lưu cài đặt.';
@@ -962,6 +972,7 @@ document.addEventListener('change', async (evt) => {
       const d = await r.json();
       $('#settings_keyword').value = d.keyword || '';
       $('#settings_link').value = d.link || '';
+      $('#settings_prompt').value = d.prompt || '';
       st.textContent = d.keyword || d.link ? 'Đã nạp cài đặt đã lưu.' : 'Chưa có cài đặt — hãy nhập và lưu.';
     } catch(e){ st.textContent = 'Không tải được cài đặt.'; }
   }
@@ -1171,7 +1182,8 @@ def api_save_page_settings(page_id):
         "keyword": (body.get("keyword") or "").strip(),
         "link": (body.get("link") or "").strip(),
         "zalo": (body.get("zalo") or "").strip(),
-        "telegram": (body.get("telegram") or "").strip()
+        "telegram": (body.get("telegram") or "").strip(),
+        "prompt": (body.get("prompt") or "").strip()
     }
     save_page_settings(s)
     return jsonify({"ok": True}), 200
