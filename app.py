@@ -309,30 +309,30 @@ INDEX_HTML = r"""<!DOCTYPE html>
   <style>
     :root{
       --bg:#f6f7f9; --card-bg:#ffffff; --text:#222; --muted:#6b7280; --border:#e6e8eb;
-      --primary:#1976d2; --radius:12px; --shadow:0 6px 18px rgba(10,10,10,.06);
+      --primary:#1976d2; --radius:10px; --shadow:0 6px 18px rgba(10,10,10,.06);
     }
     *{box-sizing:border-box} html,body{height:100%}
     body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:var(--bg);color:var(--text)}
-    .container{max-width:1100px;margin:18px auto;padding:0 16px}
-    h1{margin:0 0 12px;font-size:22px}
-    h3{margin:0 0 8px;font-size:16px}
+    .container{max-width:1120px;margin:12px auto;padding:0 12px}
+    h1{margin:0 0 8px;font-size:20px}
+    h3{margin:0 0 6px;font-size:14px}
     .tabs{position:sticky;top:0;z-index:10;display:flex;gap:8px;padding:8px 0;background:var(--bg);border-bottom:1px solid var(--border)}
-    .tabs button{padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer;font-size:13px;line-height:1}
+    .tabs button{padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer;font-size:13px;line-height:1}
     .tabs button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
     .panel{display:none}.panel.active{display:block}
-    .row{display:flex;gap:12px;flex-wrap:wrap}.col{flex:1 1 420px;min-width:320px}
-    textarea,input,select{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);font-size:14px;outline:none}
+    .row{display:flex;gap:10px;flex-wrap:wrap}.col{flex:1 1 440px;min-width:340px}
+    textarea,input,select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);font-size:14px;outline:none}
     textarea{resize:vertical} input[type="file"]{padding:6px}
-    .card{border:1px solid var(--border);background:var(--card-bg);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
-    .list{padding:4px;max-height:320px;overflow:auto;background:#fafafa;border-radius:10px;border:1px dashed var(--border);overscroll-behavior:contain}
+    .card{border:1px solid var(--border);background:var(--card-bg);border-radius:var(--radius);padding:10px;box-shadow:var(--shadow)}
+    .list{padding:2px;max-height:280px;overflow:auto;background:#fafafa;border-radius:10px;border:1px dashed var(--border);overscroll-behavior:contain}
     .item{padding:6px 8px;border-bottom:1px dashed var(--border)}
     
 
 
-.btn{padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-size:13px}
+.btn{padding:6px 10px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-size:13px}
     .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
     .grid{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(220px,1fr))}
-    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+    .toolbar{display:flex;gap:6px;flex-wrap:wrap}
 .inbox-list{padding:4px;border:1px dashed var(--border);border-radius:10px;background:#fafafa;overflow:auto;max-height:480px}
 .conv-item{padding:8px;border-bottom:1px dashed var(--border);display:flex;justify-content:space-between;gap:8px}
 .conv-meta{font-size:12px;color:#666}
@@ -341,7 +341,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 .saved-row{padding:8px}
 .saved-row .grid{grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr}
 .saved-row .meta{font-size:12px;color:#666}
-.list .item{padding:8px 10px}
+.list .item{padding:6px 8px}
 #pages .item label, #inbox_pages .item label{display:block;position:relative;padding-right:40px}
 #pages .item label span, #inbox_pages .item label span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"]{position:absolute;right:12px;top:50%;transform:translateY(-50%);margin:0}
@@ -349,7 +349,14 @@ INDEX_HTML = r"""<!DOCTYPE html>
 .list .item label span{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .list .item input[type="checkbox"]{position:absolute; right:8px; top:50%; transform:translateY(-50%); margin:0}
 
-</style>
+
+    @media (max-width: 900px){
+      .col{flex:1 1 100%; min-width:0}
+      .grid{grid-template-columns:1fr !important}
+      .tabs{gap:6px}
+      .tabs button{font-size:12px}
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -403,7 +410,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
       <div class="col">
         <div class="card">
           <h3>Đăng nội dung</h3>
-          <textarea id="post_text" rows="6" placeholder="Nội dung bài viết..."></textarea>
+          <textarea id="post_text" style="min-height:120px" rows="6" placeholder="Nội dung bài viết..."></textarea>
           <div class="grid" style="margin-top:8px">
             <div>
               <label>Loại đăng</label>
@@ -428,7 +435,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div class="status" id="post_status"></div>
           <div id="post_progress_wrap" style="margin-top:8px;display:none">
             <div class="muted" id="post_progress_text">Đang đăng...</div>
-            <div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;margin-top:6px"><div id="post_progress_bar" style="height:8px;width:0%"></div></div>
+            <div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;margin-top:6px"><div id="post_progress_bar" style="height:6px;width:0%"></div></div>
           </div>
           <div class="toolbar" style="margin-top:8px">
             <button class="btn" id="btn_export_results" disabled>Tải kết quả (.xlsx)</button>
@@ -707,7 +714,7 @@ function renderPerPageEditors(){
   };
   box.innerHTML = selected.map(pid => (
     '<div class="item"><div style="font-weight:600;margin-bottom:4px">'+nameOf(pid)+'</div>' +
-    '<textarea data-pid="'+pid+'" class="perpage_text" placeholder="Nội dung riêng cho page này (tuỳ chọn)"></textarea></div>'
+    '<textarea data-pid="'+pid+'" class="perpage_text" style="min-height:90px" placeholder="Nội dung riêng cho page này (tuỳ chọn)"></textarea></div>'
   )).join('');
 }
 document.querySelector('#perpage_toggle').addEventListener('change', renderPerPageEditors);
