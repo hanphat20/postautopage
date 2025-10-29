@@ -328,6 +328,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     .item{padding:6px 8px;border-bottom:1px dashed var(--border)}
     .list .item label{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .list .item label span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list .item input[type="checkbox"]{margin-left:auto}
 .btn{padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-size:13px}
     .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
     .grid{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(220px,1fr))}
@@ -358,6 +359,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <h3>Fanpage</h3>
           <div class="list" id="pages"></div>
           <div class="status" id="pages_status" ></div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="perpage_toggle"/> Dùng nội dung riêng cho từng Page (để trống = dùng nội dung chung)</label>
+          <div id="perpage_container" class="list" style="display:none"></div>
         </div>
         <div class="card" style="margin-top:12px">
           <h3>AI soạn nội dung</h3>
@@ -412,6 +417,14 @@ INDEX_HTML = r"""<!DOCTYPE html>
             <button class="btn" id="btn_auto_post" style="margin-left:8px">Tự viết & đăng (ảnh + bài)</button>
           </div>
           <div class="status" id="post_status"></div>
+          <div id="post_progress_wrap" style="margin-top:8px;display:none">
+            <div class="muted" id="post_progress_text">Đang đăng...</div>
+            <div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;margin-top:6px"><div id="post_progress_bar" style="height:8px;width:0%"></div></div>
+          </div>
+          <div class="toolbar" style="margin-top:8px">
+            <button class="btn" id="btn_export_results" disabled>Tải kết quả (.xlsx)</button>
+          </div>
+          <div id="post_results" class="list" style="margin-top:8px"></div>
         </div>
       </div>
     </div>
@@ -654,6 +667,96 @@ document.querySelector('#settings_page').addEventListener('change', async ()=>{
     if(document.querySelector('#settings_telegram')) document.querySelector('#settings_telegram').value = cfg.telegram || '';
   }catch(e){ /* ignore */ }
 });
+
+// ==== Per-page content override ====
+function renderPerPageEditors(){
+  const box = document.querySelector('#perpage_container');
+  const use = document.querySelector('#perpage_toggle')?.checked;
+  if(!box) return;
+  if(!use){ box.style.display='none'; box.innerHTML=''; return; }
+  const selected = selectedPageIds();
+  if(!selected.length){ box.style.display='none'; box.innerHTML='<div class="muted">Hãy chọn Page ở khung trái.</div>'; return; }
+  box.style.display='block';
+  const nameOf = id => {
+    const el = document.querySelector('.pg[value="'+id+'"]');
+    return el ? el.closest('.item').querySelector('span').textContent : id;
+  };
+  box.innerHTML = selected.map(pid => (
+    '<div class="item"><div style="font-weight:600;margin-bottom:4px">'+nameOf(pid)+'</div>' +
+    '<textarea data-pid="'+pid+'" class="perpage_text" placeholder="Nội dung riêng cho page này (tuỳ chọn)"></textarea></div>'
+  )).join('');
+}
+document.querySelector('#perpage_toggle').addEventListener('change', renderPerPageEditors);
+document.addEventListener('change', (ev)=>{
+  if(ev.target && ev.target.classList.contains('pg')){
+    if(document.querySelector('#perpage_toggle')?.checked){ renderPerPageEditors(); }
+  }
+});
+
+// ==== Bulk post with progress ====
+async function bulkPost(){
+  const pages = selectedPageIds();
+  const st = document.querySelector('#post_status');
+  const progWrap = document.querySelector('#post_progress_wrap');
+  const progText = document.querySelector('#post_progress_text');
+  const progBar = document.querySelector('#post_progress_bar');
+  const resultsBox = document.querySelector('#post_results');
+  const exportBtn = document.querySelector('#btn_export_results');
+  exportBtn.disabled = true;
+  resultsBox.innerHTML = '';
+  if(!pages.length){ st.textContent='Hãy tick ít nhất 1 page bên trái'; return; }
+
+  const mainText = (document.querySelector('#post_text')?.value||'').trim();
+  if(!mainText && !document.querySelector('#perpage_toggle')?.checked){
+    st.textContent='Nội dung trống'; return;
+  }
+
+  st.textContent='';
+  progWrap.style.display='block';
+  let done = 0, total = pages.length;
+  const rows = [];
+
+  for(const pid of pages){
+    let text = mainText;
+    const ed = document.querySelector('.perpage_text[data-pid="'+pid+'"]');
+    if(ed && ed.value.trim()) text = ed.value.trim();
+
+    progText.textContent = `Đang đăng ${done+1}/${total} ...`;
+    progBar.style.width = Math.round((done/total)*100)+'%';
+    try{
+      const r = await fetch('/api/pages/'+pid+'/post', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: text})});
+      const d = await r.json();
+      let status = 'OK', link = '';
+      if(d.error){ status = 'ERROR: '+JSON.stringify(d); }
+      else{
+        const postId = d.id || d.post_id || '';
+        link = postId ? 'https://facebook.com/'+postId : '';
+      }
+      rows.push({page_id: pid, page_name: '', status, link});
+      const line = `<div class="item"><div><strong>${pid}</strong></div><div class="conv-meta">${status}${link?(' · <a href="${link}" target="_blank">Xem bài</a>'):''}</div></div>`;
+      resultsBox.insertAdjacentHTML('beforeend', line);
+    }catch(e){
+      rows.push({page_id: pid, page_name: '', status: 'ERROR', link: ''});
+      resultsBox.insertAdjacentHTML('beforeend', `<div class="item"><div><strong>${pid}</strong></div><div class="conv-meta">ERROR</div></div>`);
+    }
+    done += 1;
+    progBar.style.width = Math.round((done/total)*100)+'%';
+  }
+  progText.textContent = `Hoàn tất: ${done}/${total}`;
+  exportBtn.disabled = false;
+  exportBtn.onclick = async ()=>{
+    try{
+      const r = await fetch('/api/export/posts_report', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({rows})});
+      if(r.status === 200){
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download='posts_report.xlsx'; a.click();
+        URL.revokeObjectURL(url);
+      }
+    }catch(_){}
+  };
+}
+/* replaced by bulkPost() */
 // AI writer (manual)
 $('#btn_ai').onclick = async () => {
   const prompt = ($('#ai_prompt').value||'').trim();
@@ -1071,3 +1174,35 @@ def webhook_events():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)
+
+
+from io import BytesIO
+try:
+    from openpyxl import Workbook
+except Exception:
+    Workbook = None
+
+@app.route("/api/export/posts_report", methods=["POST"])
+def api_export_posts_report():
+    data = request.get_json(force=True)
+    rows = data.get("rows") or []
+    if Workbook is None:
+        import csv
+        from flask import Response
+        import io as _io
+        s = _io.StringIO()
+        w = csv.writer(s)
+        w.writerow(["page_id","page_name","status","link"])
+        for r in rows:
+            w.writerow([r.get("page_id",""), r.get("page_name",""), r.get("status",""), r.get("link","")])
+        resp = Response(s.getvalue(), mimetype="text/csv")
+        resp.headers["Content-Disposition"] = "attachment; filename=posts_report.csv"
+        return resp
+
+    wb = Workbook(); ws = wb.active; ws.title = "Posts"
+    ws.append(["page_id","page_name","status","link"])
+    for r in rows:
+        ws.append([r.get("page_id",""), r.get("page_name",""), r.get("status",""), r.get("link","")])
+    bio = BytesIO(); wb.save(bio); bio.seek(0)
+    from flask import send_file
+    return send_file(bio, as_attachment=True, download_name="posts_report.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
