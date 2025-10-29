@@ -380,6 +380,18 @@ INDEX_HTML = r"""<!DOCTYPE html>
   justify-self: end;
 }
 
+
+/* === FIX: Force checkbox to end of row & reset absolute positioning === */
+#pages .item input[type="checkbox"],
+#inbox_pages .item input[type="checkbox"]{
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  transform: none !important;
+  margin: 0;
+  justify-self: end;
+}
+
 </style>
 </head>
 <body>
