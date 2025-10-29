@@ -356,7 +356,17 @@ INDEX_HTML = r"""<!DOCTYPE html>
       .tabs{gap:6px}
       .tabs button{font-size:12px}
     }
-  </style>
+  
+#pages .item, #inbox_pages .item { position: relative; padding-right: 44px; }
+#pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"]{
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%); margin: 0;
+}
+#pages .item label, #inbox_pages .item label{ display:block; }
+#pages .item label span, #inbox_pages .item label span{
+  display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+
+</style>
 </head>
 <body>
   <div class="container">
@@ -546,9 +556,7 @@ async function loadInboxPages(){
     const r = await fetch('/api/pages'); const d = await r.json();
     const arr = (d && d.data) || [];
     arr.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'vi', {sensitivity:'base'}));
-    box.innerHTML = arr.map(p => (
-      '<div class="item"><label><span>'+(p.name||'')+'</span><input type="checkbox" class="pg-inbox" value="'+p.id+'"></label></div>'
-    )).join('');
+    box.innerHTML = arr.map(p => ('<div class="item"><label><span>'+(p.name||'')+'</span></label><input type="checkbox" class="pg-inbox" value="'+p.id+'"></div>')).join('');
     st.textContent = 'Tải ' + arr.length + ' page.';
   }catch(e){ st.textContent = 'Lỗi tải danh sách page'; }
 }
@@ -611,9 +619,7 @@ async function loadPages(){
     if(d.error){ pagesStatus.textContent = JSON.stringify(d); return; }
     const arr = d.data || [];
     arr.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'vi', {sensitivity:'base'}));
-    pagesBox.innerHTML = arr.map(p => (
-      '<div class="item"><label><span>'+(p.name||'')+'</span><input type="checkbox" class="pg" value="'+p.id+'"></label></div>'
-    )).join('');
+    pagesBox.innerHTML = arr.map(p => ('<div class="item"><label><span>'+(p.name||'')+'</span></label><input type="checkbox" class="pg" value="'+p.id+'"></div>')).join('');
     pagesStatus.textContent = 'Tải ' + arr.length + ' page.';
   }catch(e){ pagesStatus.textContent = 'Lỗi tải danh sách page'; }
 }
