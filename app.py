@@ -1117,8 +1117,14 @@ def api_ai_generate():
     length = (body.get("length") or "vừa").strip()
     keyword = (body.get("keyword") or "MB66").strip()
     link = _normalize_link((body.get("link") or "").strip())
+    keyword_no_space = re.sub(r"\s+", "", keyword)
+    kw_tag_lower = "#" + keyword_no_space.lower()
     phone = (body.get("phone") or "").strip()
     telegram = (body.get("telegram") or "").strip()
+    if not phone:
+        phone = "0363169604"
+    if not telegram:
+        telegram = "@cattien999"
     extra_prompt = (body.get("prompt") or "").strip()
 
     # Build the standardized prompt per user's requested structure
@@ -1129,14 +1135,15 @@ Hãy viết 1 bài duy nhất cho fanpage có từ khóa chính là "{keyword}".
 
 Cấu trúc bài viết gồm:
 1️⃣ Dòng mở đầu có emoji (🌟 ⚡ 💫 🚀 🌐 …) và chứa từ khóa "{keyword}".
-2️⃣ Dòng tiếp theo hiển thị link chính thức:
-   🔗 {link}
+2️⃣ Dòng tiếp theo hiển thị link chính thức, đúng cú pháp:
+   {kw_tag_lower} link chính thức 🔗 {link}
 3️⃣ Viết 2–3 câu mô tả hấp dẫn, rõ ràng, nêu lợi ích khi truy cập link chính thức (an toàn, không bị chặn, giao dịch nhanh, ổn định).
 4️⃣ Thêm đoạn **“Thông tin quan trọng”** gồm 3–5 gạch đầu dòng (ưu điểm, tốc độ, hỗ trợ, bảo mật…).
 5️⃣ Thêm **Thông tin liên hệ:**
    📞 {phone}
    💬 Telegram: {telegram}
-6️⃣ Kết bài bằng **Hashtag** gồm 10–15 hashtag chứa từ khóa "{keyword}" và biến thể (có dấu/không dấu).
+6️⃣ Kết bài bằng **Hashtag** gồm 10–15 hashtag chứa từ khóa "{keyword}" và biến thể (có dấu/không dấu). **Bắt buộc** phải bao gồm các thẻ cố định sau (thay MB66 bằng từ khóa tương ứng, không bỏ bớt):
+   #{keyword_no_space} #LinkChínhThức{keyword_no_space} #{keyword_no_space}AnToàn #HỗTrợLấyLạiTiền{keyword_no_space} #RútTiền{keyword_no_space} #MởKhóaTàiKhoản{keyword_no_space}
 
 Yêu cầu:
 - Giọng văn {tone}, tự nhiên, không spam.
