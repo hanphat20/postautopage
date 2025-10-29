@@ -342,9 +342,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
 .saved-row .grid{grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr}
 .saved-row .meta{font-size:12px;color:#666}
 .list .item{padding:6px 8px}
-#pages .item label, #inbox_pages .item label{display:block;position:relative;padding-right:40px}
-#pages .item label span, #inbox_pages .item label span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"]{position:absolute;right:12px;top:50%;transform:translateY(-50%);margin:0}
+
+
+
 .list .item label{display:block; position:relative; padding-right:36px}
 .list .item label span{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .list .item input[type="checkbox"]{position:absolute; right:8px; top:50%; transform:translateY(-50%); margin:0}
@@ -357,13 +357,27 @@ INDEX_HTML = r"""<!DOCTYPE html>
       .tabs button{font-size:12px}
     }
   
-#pages .item, #inbox_pages .item { position: relative; padding-right: 44px; }
-#pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"]{
-  position: absolute; right: 12px; top: 50%; transform: translateY(-50%); margin: 0;
+
+
+
+
+
+
+/* FORCE checkbox at far right with GRID layout */
+#pages .item, #inbox_pages .item{
+  display: grid;
+  grid-template-columns: 1fr 24px; /* name | checkbox */
+  align-items: center;
+  gap: 8px;
 }
-#pages .item label, #inbox_pages .item label{ display:block; }
+#pages .item label, #inbox_pages .item label{
+  overflow: hidden;
+}
 #pages .item label span, #inbox_pages .item label span{
   display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+#pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"]{
+  justify-self: end;
 }
 
 </style>
