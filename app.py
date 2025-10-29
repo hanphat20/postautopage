@@ -342,6 +342,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
 .saved-row .grid{grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr}
 .saved-row .meta{font-size:12px;color:#666}
 .list .item{padding:8px 10px}
+#pages .item label, #inbox_pages .item label{display:block;position:relative;padding-right:40px}
+#pages .item label span, #inbox_pages .item label span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"]{position:absolute;right:12px;top:50%;transform:translateY(-50%);margin:0}
 .list .item label{display:block; position:relative; padding-right:36px}
 .list .item label span{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .list .item input[type="checkbox"]{position:absolute; right:8px; top:50%; transform:translateY(-50%); margin:0}
