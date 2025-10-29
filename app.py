@@ -431,7 +431,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <div class="card">
           <h3>Fanpage</h3>
           <div class="list" id="pages"></div>
-          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px"><label><input type="checkbox" id="pages_select_all"/> Chọn tất cả</label></div>
           <div class="status" id="pages_status" ></div>
         </div>
@@ -458,7 +457,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
               <option value="dài">Dài</option>
             </select>
           </div>
-          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px">
             <button class="btn" id="btn_ai">Tạo nội dung</button>
             <button class="btn" id="btn_ai_use_settings">Dùng cài đặt page → chèn</button>
@@ -488,7 +486,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
             <input type="file" id="photo_input" accept="image/*"/>
             <input type="text" id="media_caption" placeholder="Caption (tuỳ chọn)"/>
           </div>
-          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px">
             <button class="btn primary" id="btn_publish">Đăng</button>
             <button class="btn" id="btn_auto_post" style="margin-left:8px">Tự viết & đăng (ảnh + bài)</button>
@@ -498,7 +495,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
             <div class="muted" id="post_progress_text">Đang đăng...</div>
             <div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;margin-top:6px"><div id="post_progress_bar" style="height:6px;width:0%"></div></div>
           </div>
-          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px">
             <button class="btn" id="btn_export_results" disabled>Tải kết quả (.xlsx)</button>
           </div>
@@ -514,7 +510,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <div class="card">
           <h3>Chọn Page (đa chọn)</h3>
           <div id="inbox_pages" class="list"></div>
-          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px">
             <label><input type="checkbox" id="inbox_pages_select_all" /> Chọn tất cả</label>
             <label><input type="checkbox" id="inbox_only_unread" /> Chỉ chưa đọc</label>
@@ -545,7 +540,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
             <input id="settings_zalo" placeholder="Zalo (số/username)"/>
             <input id="settings_telegram" placeholder="Telegram (username @...)"/>
           </div>
-          <textarea id="settings_prompt" rows="4" placeholder="Prompt viết bài (tùy chọn) — ví dụ: Giọng chuyên nghiệp, tạo 5 bài khác nhau, có hashtag..."></textarea>
           <div class="toolbar" style="margin-top:8px">
             <button class="btn primary" id="btn_save_settings">Lưu cài đặt</button>
           </div>
@@ -710,7 +704,7 @@ async function loadSettingsSavedList(){
     entries.sort((a,b)=> (nameById[a[0]]||a[0]).localeCompare(nameById[b[0]]||b[0], 'vi', {sensitivity:'base'}));
     box.innerHTML = entries.map(([pid, cfg])=>{
       const name = nameById[pid] || pid;
-      const kw = (cfg.keyword||''); const link=(cfg.link||''); const zalo=(cfg.zalo||''); const telegram=(cfg.telegram||''); const prompt=(cfg.prompt||'');
+      const kw = (cfg.keyword||''); const link=(cfg.link||''); const zalo=(cfg.zalo||''); const telegram=(cfg.telegram||'');
       return `<div class="item saved-row">
         <div class="grid">
           <div><strong>${name}</strong><div class="meta">${pid}</div></div>
@@ -718,7 +712,6 @@ async function loadSettingsSavedList(){
           <input id="sv_link_${pid}" value="${link}"/>
           <input id="sv_zalo_${pid}" value="${zalo}"/>
           <input id="sv_tg_${pid}" value="${telegram}"/>
-          <textarea id="sv_prompt_${pid}" rows="3" placeholder="Prompt viết bài (tuỳ chọn)">${prompt}</textarea>
         </div>
         <div class="toolbar" style="margin-top:6px">
           <button class="btn" onclick="saveSettingsRow('${pid}')">Lưu</button>
@@ -736,9 +729,8 @@ async function saveSettingsRow(pid){
   const link = (document.querySelector('#sv_link_'+pid)?.value||'').trim();
   const zalo = (document.querySelector('#sv_zalo_'+pid)?.value||'').trim();
   const telegram = (document.querySelector('#sv_tg_'+pid)?.value||'').trim();
-  const prompt = (document.querySelector('#sv_prompt_'+pid)?.value||'').trim();
   try{
-    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword: kw, link, zalo, telegram, prompt})});
+    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword: kw, link, zalo, telegram})});
     const d = await r.json();
     if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
     st.textContent='Đã lưu cho '+pid;
@@ -881,9 +873,8 @@ $('#btn_ai_use_settings').onclick = async () => {
     const link = cfg.link || '';
     $('#ai_keyword').value = keyword;
     $('#ai_link').value = link;
-    if(cfg.prompt){ $('#ai_prompt').value = cfg.prompt; }
     $('#ai_status').textContent='Đã lấy cài đặt từ page '+pid+'. Đang tạo nội dung...';
-    const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tone: $('#ai_tone').value, length: $('#ai_length').value, keyword, link, prompt: (cfg.prompt || 'Sinh nội dung theo cài đặt page.')})});
+    const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tone: $('#ai_tone').value, length: $('#ai_length').value, keyword, link, prompt: 'Sinh nội dung theo cài đặt page.'})});
     const d = await r.json();
     if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
     $('#post_text').value = d.text || '';
@@ -950,11 +941,10 @@ $('#btn_save_settings').onclick = async () => {
   const pid = $('#settings_page').value;
   const keyword = ($('#settings_keyword').value||'').trim();
   let link = ($('#settings_link').value||'').trim();
-  const prompt = ($('#settings_prompt').value||'').trim();
   const st = $('#settings_status');
   if(!pid){ st.textContent='Chưa chọn page'; return; }
   try{
-    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword, link, prompt})});
+    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword, link})});
     const d = await r.json();
     if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
     st.textContent='Đã lưu cài đặt.';
@@ -972,7 +962,6 @@ document.addEventListener('change', async (evt) => {
       const d = await r.json();
       $('#settings_keyword').value = d.keyword || '';
       $('#settings_link').value = d.link || '';
-      $('#settings_prompt').value = d.prompt || '';
       st.textContent = d.keyword || d.link ? 'Đã nạp cài đặt đã lưu.' : 'Chưa có cài đặt — hãy nhập và lưu.';
     } catch(e){ st.textContent = 'Không tải được cài đặt.'; }
   }
@@ -1111,56 +1100,82 @@ def api_post_photo(page_id):
 # ----------------------------
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
-    if not OPENAI_API_KEY: return jsonify({"error":"NO_OPENAI_API_KEY"}), 400
+    """
+    Updated: standardized Fanpage post prompt.
+    Accepts JSON body with fields:
+      - keyword (str), link (str), phone (str), telegram (str)
+      - tone (str: "thân thiện" | "chuyên nghiệp" | "hài hước")
+      - length (str: "ngắn" | "vừa" | "dài")
+      - prompt (optional str)
+    Returns JSON: { "text": "<final post text>" }
+    """
+    if not OPENAI_API_KEY:
+        return jsonify({"error": "NO_OPENAI_API_KEY"}), 400
+
     body = request.get_json(force=True)
-    prompt = (body.get("prompt") or "").strip()
-    tone = (body.get("tone") or "thân thiện")
-    length = (body.get("length") or "vừa")
+    tone = (body.get("tone") or "thân thiện").strip()
+    length = (body.get("length") or "vừa").strip()
     keyword = (body.get("keyword") or "MB66").strip()
     link = _normalize_link((body.get("link") or "").strip())
-    if not prompt:
-        prompt = f"Viết thân bài giới thiệu {keyword} ngắn gọn, nhấn mạnh truy cập link chính thức để an toàn và ổn định."
+    phone = (body.get("phone") or "").strip()
+    telegram = (body.get("telegram") or "").strip()
+    extra_prompt = (body.get("prompt") or "").strip()
+
+    # Build the standardized prompt per user's requested structure
+    user_prompt = f"""
+Bạn là chuyên gia viết nội dung fanpage mạng xã hội.
+
+Hãy viết 1 bài duy nhất cho fanpage có từ khóa chính là "{keyword}".
+
+Cấu trúc bài viết gồm:
+1️⃣ Dòng mở đầu có emoji (🌟 ⚡ 💫 🚀 🌐 …) và chứa từ khóa "{keyword}".
+2️⃣ Dòng tiếp theo hiển thị link chính thức:
+   🔗 {link}
+3️⃣ Viết 2–3 câu mô tả hấp dẫn, rõ ràng, nêu lợi ích khi truy cập link chính thức (an toàn, không bị chặn, giao dịch nhanh, ổn định).
+4️⃣ Thêm đoạn **“Thông tin quan trọng”** gồm 3–5 gạch đầu dòng (ưu điểm, tốc độ, hỗ trợ, bảo mật…).
+5️⃣ Thêm **Thông tin liên hệ:**
+   📞 {phone}
+   💬 Telegram: {telegram}
+6️⃣ Kết bài bằng **Hashtag** gồm 10–15 hashtag chứa từ khóa "{keyword}" và biến thể (có dấu/không dấu).
+
+Yêu cầu:
+- Giọng văn {tone}, tự nhiên, không spam.
+- Bài dài khoảng 90–130 từ.
+- Không lặp lại cụm “truy cập link chính thức” quá 2 lần.
+- Không tạo thêm nhiều bài — chỉ viết 1 bài duy nhất.
+- Nội dung đảm bảo không đạo văn trùng lặp với người khác.
+{("Gợi ý thêm: " + extra_prompt) if extra_prompt else ""}
+    """.strip()
+
+    sys = (
+        "Bạn là chuyên gia copywriting mạng xã hội tiếng Việt. "
+        f"Giọng {tone}, độ dài {length}. "
+        "Chỉ trả về đúng 1 bài hoàn chỉnh theo cấu trúc đã nêu."
+    )
+
     try:
-        sys = (
-            "Bạn là copywriter mạng xã hội tiếng Việt. "
-            "Chỉ tạo NỘI DUNG THÂN BÀI và MỤC 'THÔNG TIN QUAN TRỌNG' (gạch đầu dòng). "
-            "Không viết tiêu đề, không thêm hashtag. "
-            f"Giọng {tone}, độ dài {length}."
-        )
-        user_prompt = (
-            "Nhiệm vụ:\n"
-            "- Viết 1 đoạn thân bài (50-120 từ) mạch lạc, thuyết phục.\n"
-            "- Sau đó tạo 3-5 gạch đầu dòng cho mục 'Thông tin quan trọng'.\n"
-            "- KHÔNG chèn link trong thân bài (link sẽ thêm ở trên).\n"
-            "- Ngăn cách THÂN BÀI và GẠCH ĐẦU DÒNG bằng dòng '---'.\n\n"
-            f"Chủ đề: {prompt}\n"
-            f"Từ khoá: {keyword}\n"
-        )
         headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
-        payload = {"model": OPENAI_MODEL, "messages":[{"role":"system","content":sys},{"role":"user","content":user_prompt}], "temperature":0.8}
+        payload = {
+            "model": OPENAI_MODEL,
+            "messages": [
+                {"role": "system", "content": sys},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.8
+        }
+        import requests
         r = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=60)
         if r.status_code >= 400:
-            try: return jsonify({"error":"OPENAI_ERROR", "detail": r.json()}), r.status_code
-            except Exception: return jsonify({"error":"OPENAI_ERROR", "detail": r.text}), r.status_code
+            try:
+                return jsonify({"error": "OPENAI_ERROR", "detail": r.json()}), r.status_code
+            except Exception:
+                return jsonify({"error": "OPENAI_ERROR", "detail": r.text}), r.status_code
+
         data = r.json()
-        raw = (data.get("choices") or [{}])[0].get("message", {}).get("content","").strip()
-        body_text, bullets_text = raw, ""
-        if "\n---\n" in raw:
-            parts = raw.split("\n---\n", 1)
-            body_text = parts[0].strip(); bullets_text = parts[1].strip()
-        lines = [l.strip().lstrip("-• ").rstrip() for l in bullets_text.splitlines() if l.strip()]
-        bullets = "\n".join([f"- {l}" for l in lines]) if lines else "- Truy cập an toàn.\n- Hỗ trợ nhanh chóng.\n- Ổn định dài hạn."
-        # Header sẽ luôn gắn link
-        header = f"🌟 Truy Cập Link {keyword} Chính Thức - Không Bị Chặn 🌟\n#{keyword} ➡ {link or '(chưa cài link)'}"
-        final_text = f"""{header}
-
-{body_text}
-
-Thông tin quan trọng:
-
-{bullets}
-
-Hashtags:
+        text = (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+        return jsonify({"text": text}), 200
+    except Exception as e:
+        return jsonify({"error": "OPENAI_EXCEPTION", "detail": str(e)}), 500
 #{keyword} #{keyword.replace(' ','')}AnToan"""
         return jsonify({"text": final_text}), 200
     except Exception as e:
@@ -1182,8 +1197,7 @@ def api_save_page_settings(page_id):
         "keyword": (body.get("keyword") or "").strip(),
         "link": (body.get("link") or "").strip(),
         "zalo": (body.get("zalo") or "").strip(),
-        "telegram": (body.get("telegram") or "").strip(),
-        "prompt": (body.get("prompt") or "").strip()
+        "telegram": (body.get("telegram") or "").strip()
     }
     save_page_settings(s)
     return jsonify({"ok": True}), 200
