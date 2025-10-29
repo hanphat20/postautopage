@@ -326,9 +326,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
     .card{border:1px solid var(--border);background:var(--card-bg);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
     .list{padding:4px;max-height:320px;overflow:auto;background:#fafafa;border-radius:10px;border:1px dashed var(--border);overscroll-behavior:contain}
     .item{padding:6px 8px;border-bottom:1px dashed var(--border)}
-    .list .item label{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.list .item label span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.list .item input[type="checkbox"]{margin-left:auto}
+    
+
+
 .btn{padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-size:13px}
     .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
     .grid{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(220px,1fr))}
@@ -341,6 +341,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
 .saved-row{padding:8px}
 .saved-row .grid{grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr}
 .saved-row .meta{font-size:12px;color:#666}
+.list .item{padding:8px 10px}
+.list .item label{display:block; position:relative; padding-right:36px}
+.list .item label span{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.list .item input[type="checkbox"]{position:absolute; right:8px; top:50%; transform:translateY(-50%); margin:0}
+
 </style>
 </head>
 <body>
