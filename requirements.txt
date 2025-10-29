@@ -1,4 +1,7 @@
 Flask
-gunicorn
 requests
+gunicorn
 python-dotenv
+openai
+Pillow
+aiohttp
