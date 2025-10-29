@@ -326,7 +326,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
     .card{border:1px solid var(--border);background:var(--card-bg);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
     .list{padding:4px;max-height:320px;overflow:auto;background:#fafafa;border-radius:10px;border:1px dashed var(--border);overscroll-behavior:contain}
     .item{padding:6px 8px;border-bottom:1px dashed var(--border)}
-    .btn{padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-size:13px}
+    .list .item label{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.list .item label span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn{padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-size:13px}
     .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
     .grid{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(220px,1fr))}
     .toolbar{display:flex;gap:8px;flex-wrap:wrap}
@@ -335,6 +337,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
 .conv-meta{font-size:12px;color:#666}
 .badge{display:inline-block;padding:2px 6px;border-radius:999px;border:1px solid var(--border)}
 .badge.unread{background:#ffeaea}
+.saved-row{padding:8px}
+.saved-row .grid{grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr}
+.saved-row .meta{font-size:12px;color:#666}
 </style>
 </head>
 <body>
@@ -444,11 +449,18 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div class="grid" style="margin-top:8px">
             <input id="settings_keyword" placeholder="Từ khoá (VD: MB66)"/>
             <input id="settings_link" placeholder="Link mặc định (https://...)"/>
+            <input id="settings_zalo" placeholder="Zalo (số/username)"/>
+            <input id="settings_telegram" placeholder="Telegram (username @...)"/>
           </div>
           <div class="toolbar" style="margin-top:8px">
             <button class="btn primary" id="btn_save_settings">Lưu cài đặt</button>
           </div>
           <div class="status" id="settings_status"></div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <h3>Danh sách cài đặt đã lưu</h3>
+          <div class="toolbar"><button class="btn" id="btn_settings_reload">Tải lại</button></div>
+          <div id="settings_saved_list" class="list"></div>
         </div>
       </div>
     </div>
@@ -469,7 +481,7 @@ function showTab(name){
 }
 $('#tab-posts').onclick = ()=>showTab('posts');
 $('#tab-inbox').onclick = ()=>{ showTab('inbox'); };
-$('#tab-settings').onclick = ()=>{ showTab('settings'); loadPagesToSelect('settings_page'); };
+$('#tab-settings').onclick = ()=>{ showTab('settings'); loadPagesToSelect('settings_page'); loadSettingsSavedList(); };
 
 
 const pagesBox = $('#pages');
@@ -572,6 +584,76 @@ async function loadPagesToSelect(selectId){
   }catch(e){ sel.innerHTML = '<option value="">(Không tải được)</option>'; }
 }
 
+
+
+async function loadSettingsSavedList(){
+  const box = document.querySelector('#settings_saved_list');
+  if(!box) return;
+  box.innerHTML = '<div class="muted">Đang tải...</div>';
+
+  // fetch pages for name mapping
+  let pages = [];
+  try{
+    const rp = await fetch('/api/pages'); const dp = await rp.json();
+    pages = (dp && dp.data) || [];
+  }catch(_){}
+  const nameById = Object.fromEntries(pages.map(p => [String(p.id), p.name||p.id]));
+
+  try{
+    const r = await fetch('/api/settings/list'); const d = await r.json();
+    const entries = Object.entries(d);
+    if(!entries.length){ box.innerHTML = '<div class="muted">Chưa có cài đặt nào.</div>'; return; }
+    entries.sort((a,b)=> (nameById[a[0]]||a[0]).localeCompare(nameById[b[0]]||b[0], 'vi', {sensitivity:'base'}));
+    box.innerHTML = entries.map(([pid, cfg])=>{
+      const name = nameById[pid] || pid;
+      const kw = (cfg.keyword||''); const link=(cfg.link||''); const zalo=(cfg.zalo||''); const telegram=(cfg.telegram||'');
+      return `<div class="item saved-row">
+        <div class="grid">
+          <div><strong>${name}</strong><div class="meta">${pid}</div></div>
+          <input id="sv_kw_${pid}" value="${kw}"/>
+          <input id="sv_link_${pid}" value="${link}"/>
+          <input id="sv_zalo_${pid}" value="${zalo}"/>
+          <input id="sv_tg_${pid}" value="${telegram}"/>
+        </div>
+        <div class="toolbar" style="margin-top:6px">
+          <button class="btn" onclick="saveSettingsRow('${pid}')">Lưu</button>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    box.innerHTML = '<div class="muted">Lỗi tải danh sách</div>';
+  }
+}
+
+async function saveSettingsRow(pid){
+  const st = document.querySelector('#settings_status');
+  const kw = (document.querySelector('#sv_kw_'+pid)?.value||'').trim();
+  const link = (document.querySelector('#sv_link_'+pid)?.value||'').trim();
+  const zalo = (document.querySelector('#sv_zalo_'+pid)?.value||'').trim();
+  const telegram = (document.querySelector('#sv_tg_'+pid)?.value||'').trim();
+  try{
+    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword: kw, link, zalo, telegram})});
+    const d = await r.json();
+    if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
+    st.textContent='Đã lưu cho '+pid;
+  }catch(e){ st.textContent='Lỗi lưu cài đặt cho '+pid; }
+}
+
+document.addEventListener('click', (ev)=>{
+  if(ev.target && ev.target.id==='btn_settings_reload'){ loadSettingsSavedList(); }
+});
+// Load settings on page selection in Settings tab
+document.querySelector('#settings_page').addEventListener('change', async ()=>{
+  const pid = document.querySelector('#settings_page').value;
+  if(!pid){ return; }
+  try{
+    const cfg = await (await fetch('/api/settings/'+pid)).json();
+    document.querySelector('#settings_keyword').value = cfg.keyword || '';
+    document.querySelector('#settings_link').value = cfg.link || '';
+    if(document.querySelector('#settings_zalo')) document.querySelector('#settings_zalo').value = cfg.zalo || '';
+    if(document.querySelector('#settings_telegram')) document.querySelector('#settings_telegram').value = cfg.telegram || '';
+  }catch(e){ /* ignore */ }
+});
 // AI writer (manual)
 $('#btn_ai').onclick = async () => {
   const prompt = ($('#ai_prompt').value||'').trim();
@@ -899,7 +981,9 @@ def api_save_page_settings(page_id):
     s = load_page_settings()
     s[page_id] = {
         "keyword": (body.get("keyword") or "").strip(),
-        "link": (body.get("link") or "").strip()
+        "link": (body.get("link") or "").strip(),
+        "zalo": (body.get("zalo") or "").strip(),
+        "telegram": (body.get("telegram") or "").strip()
     }
     save_page_settings(s)
     return jsonify({"ok": True}), 200
