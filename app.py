@@ -527,6 +527,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
               <option value="15">15s</option>
               <option value="30">30s</option>
             </select>
+                 <label style="margin-left:8px"><input type="checkbox" id="inbox_sound" checked/> Âm báo</label>
           </div>
           <div class="status" id="inbox_pages_status">
       <div class="col">
@@ -1208,7 +1209,7 @@ function setupSSE(){
     __evtSrc.addEventListener("message", async (e)=>{
       try{
         const data = JSON.parse(e.data || "{}");
-        if(data && data.type === "message"){
+        if(data && data.type === "message"){ playNotifySound();
       // existing message handler
 
     if(data && data.type === "typing"){
@@ -1266,6 +1267,52 @@ function setupSSE(){
 // Initialize SSE when entering Inbox tab
 document.querySelector('#tab-inbox').addEventListener('click', ()=>{
   setupSSE();
+});
+
+
+// ===== Sound notifications =====
+let __audioCtx = null;
+function ensureAudioCtx(){
+  if(!__audioCtx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(AC){ __audioCtx = new AC(); }
+  }
+  if(__audioCtx && __audioCtx.state === 'suspended'){
+    __audioCtx.resume().catch(()=>{});
+  }
+  return __audioCtx;
+}
+function playNotifySound(){
+  const chk = document.querySelector('#inbox_sound');
+  if(!chk || !chk.checked) return;
+  const ctx = ensureAudioCtx();
+  if(!ctx) return;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = 'sine';
+  o.frequency.value = 880;
+  o.connect(g); g.connect(ctx.destination);
+  const t = ctx.currentTime;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+  o.start(t);
+  o.stop(t + 0.3);
+}
+// Persist checkbox state
+document.addEventListener('DOMContentLoaded', ()=>{
+  const chk = document.querySelector('#inbox_sound');
+  if(chk){
+    const saved = localStorage.getItem('inbox_sound') || '1';
+    chk.checked = saved === '1';
+    chk.addEventListener('change', ()=>{
+      localStorage.setItem('inbox_sound', chk.checked ? '1' : '0');
+    });
+  }
+});
+// Resume audio on first interaction to satisfy browser policies
+['click','keydown','touchstart'].forEach(evt=>{
+  window.addEventListener(evt, ()=>{ ensureAudioCtx(); }, {once:true, passive:true});
 });
 
 </script>
