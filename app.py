@@ -345,9 +345,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
 
 
-.list .item label{display:block; position:relative; padding-right:36px}
+.list .item label{display:block; position:static; padding-right:0}
 .list .item label span{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.list .item input[type="checkbox"]{position:absolute; right:8px; top:50%; transform:translateY(-50%); margin:0}
+.list .item input[type="checkbox"]{position:static; margin:0}
 
 
     @media (max-width: 900px){
@@ -366,7 +366,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 /* FORCE checkbox at far right with GRID layout */
 #pages .item, #inbox_pages .item{
   display: grid;
-  grid-template-columns: 1fr 24px; /* name | checkbox */
+  grid-template-columns: 1fr auto; /* name | checkbox */
   align-items: center;
   gap: 8px;
 }
