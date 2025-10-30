@@ -163,25 +163,25 @@ INDEX_HTML = r"""<!doctype html>
     .sendbar{display:flex;gap:8px;margin-top:8px}
     .sendbar input{flex:1}
 
-  /* Settings layout */
-  .settings-row{
-    display:grid;
-    grid-template-columns: 300px 1fr 1fr; /* Tên page | Keyword | Source */
-    gap:12px;
-    align-items:center;
-  }
-  .settings-name{
-    font-weight:600;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  .settings-input{
-    width:100%;
-    min-height:36px;
-    padding:8px 10px;
-    border:1px solid #ddd; border-radius:8px;
-  }
-  #settings_box{ padding:12px; }
-</style>
+    /* Settings layout */
+    .settings-row{
+      display:grid;
+      grid-template-columns: 300px 1fr 1fr; /* Tên page | Keyword | Source */
+      gap:12px;
+      align-items:center;
+    }
+    .settings-name{
+      font-weight:600;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .settings-input{
+      width:100%;
+      min-height:36px;
+      padding:8px 10px;
+      border:1px solid #ddd; border-radius:8px;
+    }
+    #settings_box{ padding:12px; }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -257,7 +257,12 @@ INDEX_HTML = r"""<!doctype html>
       <div class="muted">Webhook URL: <code>/webhook/events</code> · SSE: <code>/stream/messages</code></div>
       <div class="status" id="settings_status"></div>
       <div id="settings_box" class="pages-box"></div>
-      <div class="row" style="gap:8px;align-items:center"><button class="btn primary" id="btn_settings_save">Lưu cài đặt</button><button class="btn" id="btn_settings_export">Xuất CSV</button><label class="btn" for="settings_import" style="cursor:pointer">Nhập CSV</label><input type="file" id="settings_import" accept=".csv" style="display:none"></div>
+      <div class="row" style="gap:8px;align-items:center">
+        <button class="btn primary" id="btn_settings_save">Lưu cài đặt</button>
+        <button class="btn" id="btn_settings_export">Xuất CSV</button>
+        <label class="btn" for="settings_import" style="cursor:pointer">Nhập CSV</label>
+        <input type="file" id="settings_import" accept=".csv" style="display:none">
+      </div>
     </div>
   </div>
 
@@ -501,10 +506,10 @@ INDEX_HTML = r"""<!doctype html>
     try{
       const r = await fetch('/api/settings/get'); const d = await r.json();
       const rows = (d.data||[]).map(s => (
-        '<div class="row" style="gap:8px;align-items:center">' +
-        '<div style="min-width:180px"><b>'+ (s.name||s.id) +'</b></div>' +
-        '<input type="text" class="set-keyword" data-id="'+s.id+'" placeholder="Từ khoá" value="'+(s.keyword||'')+'" style="flex:1">' +
-        '<input type="text" class="set-source" data-id="'+s.id+'" placeholder="Link nguồn/truy cập" value="'+(s.source||'')+'" style="flex:1">' +
+        '<div class="settings-row">' +
+          '<div class="settings-name">' + (s.name||s.id) + '</div>' +
+          '<input type="text" class="settings-input set-keyword" data-id="'+s.id+'" placeholder="Từ khoá" value="'+(s.keyword||'')+'">' +
+          '<input type="text" class="settings-input set-source"  data-id="'+s.id+'" placeholder="Link nguồn/truy cập" value="'+(s.source||'')+'">' +
         '</div>'
       )).join('');
       box.innerHTML = rows || '<div class="muted">Không có page.</div>';
@@ -757,71 +762,12 @@ def api_settings_save():
     return jsonify({"ok": True})
 
 
-@app.route("/api/settings/export")
-def api_settings_export():
-    """Export current settings to CSV (id,name,keyword,source)."""
-    import csv
-    from io import StringIO
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["id","name","keyword","source"])
-    data = _load_settings()
-    # include names
-    for pid, token in PAGE_TOKENS.items():
-        try:
-            info = fb_get(pid, {"access_token": token, "fields": "name"})
-            name = info.get("name", f"Page {pid}")
-        except Exception:
-            name = f"Page {pid}"
-        conf = data.get(pid) or {}
-        writer.writerow([pid, name, conf.get("keyword",""), conf.get("source","")])
-    csv_text = output.getvalue()
-    from flask import Response
-    return Response(csv_text, mimetype="text/csv",
-                    headers={"Content-Disposition": "attachment; filename=settings.csv"})
-
-@app.route("/api/settings/import", methods=["POST"])
-def api_settings_import():
-    """Import settings from uploaded CSV with headers id,keyword,source (name optional)."""
-    import csv
-    file = request.files.get("file")
-    if not file:
-        return jsonify({"error": "Thiếu file CSV"})
-    content = file.read().decode("utf-8", errors="ignore")
-    rdr = csv.DictReader(content.splitlines())
-    data = _load_settings()
-    count = 0
-    for row in rdr:
-        pid = (row.get("id") or "").strip()
-        if not pid:
-            continue
-        if pid not in PAGE_TOKENS:
-            # skip unknown page ids
-            continue
-        keyword = (row.get("keyword") or row.get("tukhoa") or "").strip()
-        source  = (row.get("source")  or row.get("link")   or "").strip()
-        if pid not in data:
-            data[pid] = {}
-        if keyword or source:
-            data[pid]["keyword"] = keyword
-            data[pid]["source"]  = source
-            count += 1
-    _save_settings(data)
-    return jsonify({"ok": True, "updated": count})
-
-
 # ------------------------ API: AI generate from settings ------------------------
-
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
-    """
-    Sinh bài viết theo mẫu yêu cầu (2 dòng đầu link không bị chặn + phần 'Thông tin quan trọng' + liên hệ cố định + hashtags).
-    Bài viết được làm khác nhau mỗi lần nhờ random hoá emoji/cụm từ và trộn thứ tự bullet.
-    """
-    import random
     js = request.get_json(force=True) or {}
     page_id = js.get("page_id") or ""
-    extra_prompt = (js.get("prompt") or "").strip()
+    prompt = (js.get("prompt") or "").strip()
 
     if not page_id:
         return jsonify({"error": "Chưa chọn Page"})
@@ -831,86 +777,28 @@ def api_ai_generate():
     keyword = (conf.get("keyword") or "").strip()
     source  = (conf.get("source") or "").strip()
 
-    if not keyword or not source:
-        return jsonify({"error": "Page thiếu Từ khoá hoặc Link nguồn trong Cài đặt"})
+    if not keyword and not source:
+        return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
 
-    # Helpers
-    kw_upper = keyword.upper()
-    kw_no_space = ''.join(ch for ch in keyword if ch.isalnum())
-    arrows = ["➡", "⟶", "→", "⇒", "⤵"]
-    stars  = ["✨","🌟","💫","🔆","☀️"]
-    starts = [
-        "Truy cập Link {kw} Chính Thức – Không Bị Chặn",
-        "Lối vào {kw} chính thức · an toàn, không bị chặn",
-        "Đường dẫn {kw} chuẩn nhà cái – không lo chặn",
-        "Cổng vào {kw} đã xác minh · chống chặn",
-    ]
-    # 2 dòng đầu
-    line1 = f"{random.choice(stars)} {random.choice(starts).format(kw=kw_upper)} {random.choice(stars)}"
-    line2 = f"#{kw_upper} {random.choice(arrows)} {source}"
+    lines = []
+    if keyword:
+        lines.append(f"📌 Chủ đề: {keyword}")
+    if source:
+        lines.append(f"🔗 Tham khảo: {source}")
+    if prompt:
+        lines.append("")
+        lines.append(f"Yêu cầu thêm: {prompt}")
 
-    # Bullets - thông tin quan trọng (random order + emojis)
-    bullets = [
-        (["🛡️","🔒","✅"], "Bảo mật thông tin tuyệt đối"),
-        (["⚡","🚀"], "Tốc độ truy cập ổn định, nhanh"),
-        (["🤝","🧰","🛟"], "Hỗ trợ khách hàng 24/7"),
-        (["🎮","🃏","🎲"], "Đa dạng trò chơi và sản phẩm"),
-        (["💳","💸"], "Nạp/rút linh hoạt, xử lý nhanh"),
-    ]
-    random.shuffle(bullets)
-    bullet_lines = []
-    for icons, text_item in bullets:
-        bullet_lines.append(f"{random.choice(icons)} {text_item}")
-    info_block_title = random.choice(["**Thông tin quan trọng:**", "**Thông tin nổi bật:**", "**Điểm đáng chú ý:**"])
-    info_block = info_block_title + "
-" + "
-".join(f"- {b}" for b in bullet_lines)
+    lines.append("")
+    lines.append("———")
+    lines.append(f"{keyword or 'Bài viết'} – tóm tắt ngắn:")
+    lines.append(f"- Giới thiệu nhanh về {keyword.lower() if keyword else 'chủ đề'}")
+    lines.append("- 3 lợi ích chính cho người đọc")
+    lines.append("- Gợi ý hành động (CTA) rõ ràng")
+    if source:
+        lines.append(f"\n➡️ Xem chi tiết: {source}")
 
-    # Liên hệ cố định
-    contact = "**Thông tin liên hệ:**
-SĐT: 0927395058
-Telegram: @cattien999"
-
-    # Hashtags cố định + mở rộng theo keyword
-    base_tags = [f"#{kw_upper}", f"#LinkChínhThức{kw_no_space}", f"#{kw_upper}AnToàn",
-                 f"#HỗTrợLấyLạiTiền{kw_upper}", f"#RútTiền{kw_upper}", f"#MởKhóaTàiKhoản{kw_upper}"]
-    more_tags_pool = [
-        f"#{kw_no_space}", f"#{kw_no_space}vn", f"#{kw_no_space}support", f"#{kw_no_space}tips",
-        "#caocuoc", "#giadinhgame", "#khuyenmai", "#trangchu",
-        "#thanhtoan", "#uytin", "#sukien", "#tuyetdoi",
-    ]
-    # chọn thêm 6 tag khác nhau (không trùng)
-    extra_tags = []
-    pool = more_tags_pool[:]
-    random.shuffle(pool)
-    for tag in pool:
-        if tag.lower() not in [t.lower() for t in base_tags] and len(extra_tags) < 6:
-            extra_tags.append(tag)
-    hashtags = " ".join(base_tags + extra_tags)
-
-    # Phần mô tả mở đầu khác nhau để tránh trùng lặp
-    openers = [
-        f"Truy cập vào link chính thức của {keyword} để không gặp vấn đề bị chặn. Kết nối mượt mà, giao dịch an toàn.",
-        f"Đây là đường dẫn hợp lệ của {keyword}, đảm bảo truy cập trơn tru và bảo mật dữ liệu.",
-        f"Vào {keyword} qua link đã xác minh để chơi/bảo trì ổn định, không gián đoạn.",
-        f"Link nhà cái {keyword} đã kiểm duyệt, dùng để đăng nhập nhanh và an toàn.",
-    ]
-    opener = random.choice(openers)
-    if extra_prompt:
-        opener += "
-
-" + extra_prompt.strip()
-
-    # Gộp bài
-    parts = [
-        line1, line2, "",
-        opener, "",
-        info_block, "",
-        contact, "",
-        "Hashtags:", hashtags
-    ]
-    text = "
-".join(parts).strip()
+    text = "\n".join(lines).strip()
     return jsonify({"text": text})
 
 
@@ -1009,8 +897,24 @@ def webhook_events():
     return jsonify({"ok": True})
 
 
-@app.route("/api/settings/export")
-def api_settings_export():
+# ------------------------ SSE (dummy) ------------------------
+@app.route("/stream/messages")
+def stream_messages():
+    if DISABLE_SSE:
+        return Response("SSE disabled", status=200, mimetype="text/plain")
+
+    def gen():
+        yield "retry: 15000\n\n"
+        while True:
+            time.sleep(15)
+            yield "data: {}\n\n"
+
+    return Response(gen(), mimetype="text/event-stream")
+
+
+# ------------------------ CSV Export/Import Settings ------------------------
+@app.route("/api/settings/export", endpoint="api_settings_export_v2")
+def api_settings_export_v2():
     """Export current settings to CSV (id,name,keyword,source)."""
     import csv
     from io import StringIO
@@ -1018,7 +922,6 @@ def api_settings_export():
     writer = csv.writer(output)
     writer.writerow(["id","name","keyword","source"])
     data = _load_settings()
-    # include names
     for pid, token in PAGE_TOKENS.items():
         try:
             info = fb_get(pid, {"access_token": token, "fields": "name"})
@@ -1028,12 +931,11 @@ def api_settings_export():
         conf = data.get(pid) or {}
         writer.writerow([pid, name, conf.get("keyword",""), conf.get("source","")])
     csv_text = output.getvalue()
-    from flask import Response
     return Response(csv_text, mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=settings.csv"})
 
-@app.route("/api/settings/import", methods=["POST"])
-def api_settings_import():
+@app.route("/api/settings/import", methods=["POST"], endpoint="api_settings_import_v2")
+def api_settings_import_v2():
     """Import settings from uploaded CSV with headers id,keyword,source (name optional)."""
     import csv
     file = request.files.get("file")
@@ -1060,21 +962,6 @@ def api_settings_import():
             count += 1
     _save_settings(data)
     return jsonify({"ok": True, "updated": count})
-
-
-# ------------------------ SSE (dummy) ------------------------
-@app.route("/stream/messages")
-def stream_messages():
-    if DISABLE_SSE:
-        return Response("SSE disabled", status=200, mimetype="text/plain")
-
-    def gen():
-        yield "retry: 15000\n\n"
-        while True:
-            time.sleep(15)
-            yield "data: {}\n\n"
-
-    return Response(gen(), mimetype="text/event-stream")
 
 
 if __name__ == "__main__":
