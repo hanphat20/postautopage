@@ -262,11 +262,16 @@ INDEX_HTML = r"""<!doctype html>
   async function loadThreadByIndex(i){
     const conv = (window.__convData||[])[i]; if(!conv) return;
     window.__currentConv = conv;
+    // cache user_id from participants if server provided it
+    if(!conv.user_id && conv.participants && conv.participants.data){
+      const candidate = conv.participants.data.find(p => p.id !== conv.page_id);
+      if(candidate) conv.user_id = candidate.id;
+    }
     const box = $('#thread_messages'); const head = $('#thread_header'); const st = $('#thread_status');
     head && (head.textContent = (conv.senders||'') + ' · ' + (conv.page_name||''));
     box.innerHTML = '<div class="muted">Đang tải tin nhắn...</div>';
     try{
-      const r = await fetch('/api/inbox/messages?conversation_id='+encodeURIComponent(conv.id));
+      const r = await fetch('/api/inbox/messages?conversation_id='+encodeURIComponent(conv.id)+'&page_id='+encodeURIComponent(conv.page_id||''));
       const d = await r.json(); const msgs = d.data || [];
       box.innerHTML = msgs.map(function(m){
         const who  = (m.from && m.from.name) ? m.from.name : '';
@@ -300,7 +305,7 @@ INDEX_HTML = r"""<!doctype html>
     st.textContent='Đang gửi...';
     try{
       const r = await fetch('/api/inbox/reply', {method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({conversation_id: conv.id, page_id: conv.page_id, text: txt})
+        body: JSON.stringify({conversation_id: conv.id, page_id: conv.page_id, user_id: conv.user_id||null, text: txt})
       });
       const d = await r.json();
       if(d.error){ st.textContent=d.error; return; }
@@ -349,7 +354,14 @@ def index():
 
 @app.route("/api/pages")
 def api_pages():
-    pages = [{"id": pid, "name": f"Page {pid}"} for pid in PAGE_TOKENS.keys()]
+    pages = []
+    for pid, token in PAGE_TOKENS.items():
+        try:
+            data = fb_get(pid, {"access_token": token, "fields": "name"})
+            name = data.get("name", f"Page {pid}")
+        except Exception:
+            name = f"Page {pid} (lỗi lấy tên)"
+        pages.append({"id": pid, "name": name})
     return jsonify({"data": pages})
 
 
@@ -377,6 +389,18 @@ def api_inbox_conversations():
             for c in data.get("data", []):
                 c["page_id"] = pid
                 c["page_name"] = f"Page {pid}"
+                # pick user_id (PSID) from participants if available
+                try:
+                    parts = c.get("participants", {}).get("data", [])
+                    # the user is whoever is not the page itself
+                    uid = None
+                    for p in parts:
+                        if p.get("id") != pid:
+                            uid = p.get("id"); break
+                    if uid:
+                        c["user_id"] = uid
+                except Exception:
+                    pass
                 if only_unread and not c.get("unread_count"):
                     continue
                 conversations.append(c)
@@ -394,10 +418,13 @@ def api_inbox_conversations():
 def api_inbox_messages():
     try:
         conv_id = request.args.get("conversation_id")
+        page_id = request.args.get("page_id")
         if not conv_id:
             return jsonify({"data": []})
-        token = None
-        if PAGE_TOKENS:
+        # prefer the token of the page that owns this conversation
+        if page_id:
+            token = get_page_token(page_id)
+        elif PAGE_TOKENS:
             token = list(PAGE_TOKENS.values())[0]
         else:
             return jsonify({"error": "Không có PAGE_TOKENS"})
