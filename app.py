@@ -1332,6 +1332,126 @@ document.addEventListener('click', function(e){
   cb.dispatchEvent(new Event('change', { bubbles: true }));
 });
 
+
+// --- Added: manual refresh for conversations button
+(function(){
+  const btn = document.querySelector('#btn_inbox_refresh');
+  if(btn){
+    btn.addEventListener('click', async ()=>{
+      const st = document.querySelector('#inbox_conv_status');
+      try{
+        st && (st.textContent = 'Đang tải hội thoại...');
+        await refreshConversations();
+      }catch(_){
+        st && (st.textContent = 'Không tải được hội thoại.');
+      }
+    });
+  }
+})();
+
+// --- Added: Auto-write & post (image + text)
+(function(){
+  const btn = document.querySelector('#btn_auto_post');
+  if(!btn) return;
+  btn.onclick = async () => {
+    const pages = selectedPageIds();
+    const st = document.querySelector('#post_status');
+    const progWrap = document.querySelector('#post_progress_wrap');
+    const progText = document.querySelector('#post_progress_text');
+    const progBar = document.querySelector('#post_progress_bar');
+    const resultsBox = document.querySelector('#post_results');
+    const exportBtn = document.querySelector('#btn_export_results');
+    const photo = document.querySelector('#photo_input')?.files?.[0] || null;
+    const video = document.querySelector('#video_input')?.files?.[0] || null;
+
+    exportBtn && (exportBtn.disabled = true);
+    resultsBox && (resultsBox.innerHTML = '');
+
+    if(!pages.length){ st.textContent='Hãy tick ít nhất 1 page bên trái'; return; }
+    if(!photo && !video){ st.textContent='Hãy chọn ảnh hoặc video trước'; return; }
+
+    // If no text/caption, generate via AI using first page's settings
+    let text = (document.querySelector('#post_text')?.value || '').trim();
+    let caption = (document.querySelector('#media_caption')?.value || '').trim();
+    if(!text){
+      try{
+        const pid0 = pages[0];
+        const cfg = await (await fetch('/api/settings/'+pid0)).json();
+        const keyword = (cfg.keyword || 'MB66');
+        const link = (cfg.link || '');
+        const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword, link, prompt:'Sinh nội dung cho bài có ảnh.'})});
+        const d = await r.json();
+        if(!d.error && d.text){
+          text = (d.text || '').trim();
+          const pt = document.querySelector('#post_text'); if(pt) pt.value = text;
+        }
+      }catch(_){}
+    }
+    if(!caption){ caption = text; const mc = document.querySelector('#media_caption'); if(mc) mc.value = caption; }
+
+    st.textContent = 'Đang tự viết & đăng (có giãn cách an toàn)...';
+    if(progWrap) progWrap.style.display = 'block';
+    if(progBar) progBar.style.width = '0%';
+    const rows = [];
+    let done = 0, total = pages.length;
+
+    for(const pid of pages){
+      if(progText) progText.textContent = `Đang đăng ${done+1}/${total} ...`;
+      if(progBar) progBar.style.width = Math.round((done/total)*100)+'%';
+      try{
+        let d;
+        if(video){
+          const fd = new FormData();
+          fd.append('video', video);
+          fd.append('description', caption || text || '');
+          const r = await fetch('/api/pages/'+pid+'/video', {method:'POST', body: fd});
+          d = await r.json();
+        }else{
+          const fd = new FormData();
+          fd.append('photo', photo);
+          fd.append('caption', caption || text || '');
+          const r = await fetch('/api/pages/'+pid+'/photo', {method:'POST', body: fd});
+          d = await r.json();
+        }
+        let status = 'OK', link = '';
+        if(d.error){ status = 'ERROR: '+JSON.stringify(d); }
+        else{
+          const postId = d.id || d.post_id || '';
+          link = postId ? 'https://facebook.com/'+postId : (d.permalink_url || '');
+        }
+        rows.push({page_id: pid, page_name: '', status, link});
+        if(resultsBox){
+          const line = `<div class="item"><div><strong>${pid}</strong></div><div class="conv-meta">${status}${link?(' · <a href="${link}" target="_blank">Xem bài</a>'):''}</div></div>`;
+          resultsBox.insertAdjacentHTML('beforeend', line);
+        }
+      }catch(e){
+        rows.push({page_id: pid, page_name: '', status: 'ERROR', link: ''});
+        if(resultsBox){
+          resultsBox.insertAdjacentHTML('beforeend', `<div class="item"><div><strong>${pid}</strong></div><div class="conv-meta">ERROR</div></div>`);
+        }
+      }
+      done += 1;
+      if(progBar) progBar.style.width = Math.round((done/total)*100)+'%';
+      await new Promise(res=>setTimeout(res, 650)); // small spacing for safety
+    }
+    if(progText) progText.textContent = `Hoàn tất: ${done}/${total}`;
+    if(exportBtn){
+      exportBtn.disabled = false;
+      exportBtn.onclick = async ()=>{
+        try{
+          const r = await fetch('/api/export/posts_report', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({rows})});
+          if(r.status === 200){
+            const blob = await r.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href=url; a.download='posts_report.xlsx'; a.click();
+            URL.revokeObjectURL(url);
+          }
+        }catch(_){}
+      };
+    }
+  };
+})();
+
 </script>
   </div>
 </body>
