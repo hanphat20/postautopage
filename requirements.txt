@@ -2,6 +2,6 @@ Flask
 requests
 gunicorn>=21.2
 python-dotenv
-openai
 Pillow
 aiohttp
+openpyxl     # để xuất .xlsx; nếu thiếu, app sẽ tự fallback sang CSV
