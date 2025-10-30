@@ -50,6 +50,8 @@ SETTINGS: Dict[str, Any] = {
     "_recent_posts": []
 }
 
+SSE_DISABLED = os.environ.get('DISABLE_SSE', '0').strip() in ('1','true','yes')
+
 # ==== Persistent settings and dedup ====
 SETTINGS_FILE = "page_settings.json"
 DEDUP_FILE = "dedup.json"
@@ -1454,8 +1456,53 @@ document.addEventListener('click', function(e){
 
 </script>
   </div>
+
+<script>
+// ---- Safe SSE setup (tolerate 500/204) ----
+(function(){
+  const oldSetup = (typeof setupSSE === 'function') ? setupSSE : null;
+  window.setupSSE = function(){
+    try{
+      if (typeof EventSource === 'undefined') return;
+      var es = new EventSource('/stream/messages');
+      es.onerror = function(){ /* swallow SSE errors */ };
+      es.onopen = function(){ /* ok */ };
+      // Keep existing handlers if defined by page scripts
+      if(oldSetup && oldSetup!==window.setupSSE){ try{ oldSetup(); }catch(e){} }
+    }catch(e){ /* ignore */ }
+  };
+})();
+
+// ---- Minimal robust refreshConversations fallback ----
+window.refreshConversations = window.refreshConversations || (async function(){
+  const st   = document.querySelector('#inbox_conv_status');
+  const list = document.querySelector('#conversations');
+  if(!list) return;
+  const ids = Array.from(document.querySelectorAll('.pg-inbox:checked')).map(i=>i.value);
+  const onlyUnread = document.querySelector('#inbox_only_unread')?.checked ? 1 : 0;
+  if(!ids.length){ st && (st.textContent='Hãy chọn ít nhất 1 page'); list.innerHTML=''; return; }
+  st && (st.textContent='Đang tải hội thoại...');
+  try{
+    const url = '/api/inbox/conversations?pages='+encodeURIComponent(ids.join(','))+'&only_unread='+onlyUnread+'&limit=50';
+    const r = await fetch(url); const d = await r.json();
+    if(d.error){ st && (st.textContent = JSON.stringify(d)); return; }
+    window.__convData = d.data || [];
+    list.innerHTML = (window.__convData).map((x,i)=>{
+      const when = x.updated_time ? new Date(x.updated_time).toLocaleString('vi-VN') : '';
+      const badge = x.unread ? '<span class="badge unread">Chưa đọc '+(x.unread_count||'')+'</span>' : '<span class="badge">Đã đọc</span>';
+      return '<div class="conv-item" data-idx="'+i+'">'
+        + '<div><div><strong>'+(x.senders||'(không rõ người gửi)')+'</strong> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>'
+        + '<div class="conv-meta">'+(x.snippet||'')+'</div></div>'
+        + '<div style="text-align:right; min-width:160px"><div class="conv-meta">'+when+'</div><div>'+badge+'</div></div>'
+        + '</div>';
+    }).join('') || '<div class="muted">Không có hội thoại.</div>';
+    st && (st.textContent = 'Tải ' + (window.__convData.length) + ' hội thoại.');
+  }catch(e){ st && (st.textContent='Không tải được hội thoại.'); }
+});
+</script>
 </body>
-</html>"""
+</html>
+"""
 
 @app.route("/")
 def index():
@@ -1724,7 +1771,7 @@ def api_ai_generate():
     phone = (body.get("phone") or "").strip()
     telegram = (body.get("telegram") or "").strip()
     if not phone:
-        phone = "0363169604"
+        phone = "0927395058"
     if not telegram:
         telegram = "@cattien999"
 
@@ -1884,29 +1931,44 @@ def _sse_publish(event: dict):
 
 @app.route("/stream/messages")
 def sse_stream():
-    from flask import Response, stream_with_context
+    from flask import Response, stream_with_context, request
+    if SSE_DISABLED:
+        # Allow front-end to continue without SSE
+        return Response("SSE disabled", status=204, mimetype="text/plain")
+
     @stream_with_context
     def gen():
         q = _sse_register()
         try:
-            yield "event: hello\ndata: {}\n\n"
+            try:
+                yield "event: hello\ndata: {}\n\n"
+            except Exception:
+                pass
             last_ping = int(_time.time())
             while True:
-                if len(q) > 0:
-                    data = q.popleft()
-                    yield f"event: message\ndata: {data}\n\n"
-                else:
+                try:
+                    if len(q) > 0:
+                        data = q.popleft()
+                        yield f"event: message\ndata: {data}\n\n"
                     now = int(_time.time())
                     if now - last_ping >= 15:
-                        yield "event: ping\ndata: {}\n\n"
                         last_ping = now
+                        yield "event: ping\ndata: {}\n\n"
                     _time.sleep(0.5)
-        except GeneratorExit:
-            pass
+                except GeneratorExit:
+                    break
+                except Exception:
+                    # Avoid bubbling exceptions -> 500
+                    try:
+                        yield "event: ping\ndata: {}\n\n"
+                    except Exception:
+                        pass
+                    _time.sleep(1.0)
         finally:
             _sse_unregister(q)
+
     resp = Response(gen(), mimetype="text/event-stream")
-    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Cache-Control"] = "no-cache, no-transform"
     resp.headers["X-Accel-Buffering"] = "no"
     resp.headers["Connection"] = "keep-alive"
     return resp
