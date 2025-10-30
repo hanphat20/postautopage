@@ -1469,6 +1469,10 @@ def reels_start(page_id: str, page_token: str):
 
 def reels_finish(page_id: str, page_token: str, video_id: str, description: str):
     return graph_post(f"{page_id}/video_reels", {"upload_phase": "finish", "video_id": video_id, "description": description}, page_token, ctx_key=_ctx_key_for_page(page_id))
+
+
+@app.route("/api/inbox/conversations")
+
 @app.route("/api/inbox/messages")
 def api_inbox_messages():
     token = session.get("user_access_token") or (load_tokens().get("user_long") or {}).get("access_token")
@@ -1596,6 +1600,7 @@ def api_inbox_mark_seen():
         "sender_action": "mark_seen"
     }, page_token, ctx_key=_ctx_key_for_page(page_id))
     return jsonify(data), st
+
 @app.route("/api/inbox/conversations")
 def api_inbox_conversations():
     token = session.get("user_access_token") or (load_tokens().get("user_long") or {}).get("access_token")
@@ -1881,27 +1886,32 @@ def _sse_publish(event: dict):
 
 @app.route("/stream/messages")
 def sse_stream():
+    from flask import Response, stream_with_context
+    @stream_with_context
     def gen():
         q = _sse_register()
         try:
-            # initial hello
             yield "event: hello\ndata: {}\n\n"
             last_ping = int(_time.time())
             while True:
-                if q:
+                if len(q) > 0:
                     data = q.popleft()
                     yield f"event: message\ndata: {data}\n\n"
                 else:
-                    # heartbeat every 15s
                     now = int(_time.time())
                     if now - last_ping >= 15:
                         yield "event: ping\ndata: {}\n\n"
                         last_ping = now
                     _time.sleep(0.5)
+        except GeneratorExit:
+            pass
         finally:
             _sse_unregister(q)
-    from flask import Response
-    return Response(gen(), mimetype="text/event-stream")
+    resp = Response(gen(), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"
+    resp.headers["Connection"] = "keep-alive"
+    return resp
 # ----------------------------
 # Minimal webhook/events
 # ----------------------------
