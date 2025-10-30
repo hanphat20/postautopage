@@ -5,5 +5,3 @@ python-dotenv
 openai
 Pillow
 aiohttp
-gevent==24.2.1
-greenlet>=3.0.1
