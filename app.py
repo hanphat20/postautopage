@@ -811,11 +811,17 @@ def api_settings_import():
 
 
 # ------------------------ API: AI generate from settings ------------------------
+
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
+    """
+    Sinh bài viết theo mẫu yêu cầu (2 dòng đầu link không bị chặn + phần 'Thông tin quan trọng' + liên hệ cố định + hashtags).
+    Bài viết được làm khác nhau mỗi lần nhờ random hoá emoji/cụm từ và trộn thứ tự bullet.
+    """
+    import random
     js = request.get_json(force=True) or {}
     page_id = js.get("page_id") or ""
-    prompt = (js.get("prompt") or "").strip()
+    extra_prompt = (js.get("prompt") or "").strip()
 
     if not page_id:
         return jsonify({"error": "Chưa chọn Page"})
@@ -825,28 +831,86 @@ def api_ai_generate():
     keyword = (conf.get("keyword") or "").strip()
     source  = (conf.get("source") or "").strip()
 
-    if not keyword and not source:
-        return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
+    if not keyword or not source:
+        return jsonify({"error": "Page thiếu Từ khoá hoặc Link nguồn trong Cài đặt"})
 
-    lines = []
-    if keyword:
-        lines.append(f"📌 Chủ đề: {keyword}")
-    if source:
-        lines.append(f"🔗 Tham khảo: {source}")
-    if prompt:
-        lines.append("")
-        lines.append(f"Yêu cầu thêm: {prompt}")
+    # Helpers
+    kw_upper = keyword.upper()
+    kw_no_space = ''.join(ch for ch in keyword if ch.isalnum())
+    arrows = ["➡", "⟶", "→", "⇒", "⤵"]
+    stars  = ["✨","🌟","💫","🔆","☀️"]
+    starts = [
+        "Truy cập Link {kw} Chính Thức – Không Bị Chặn",
+        "Lối vào {kw} chính thức · an toàn, không bị chặn",
+        "Đường dẫn {kw} chuẩn nhà cái – không lo chặn",
+        "Cổng vào {kw} đã xác minh · chống chặn",
+    ]
+    # 2 dòng đầu
+    line1 = f"{random.choice(stars)} {random.choice(starts).format(kw=kw_upper)} {random.choice(stars)}"
+    line2 = f"#{kw_upper} {random.choice(arrows)} {source}"
 
-    lines.append("")
-    lines.append("———")
-    lines.append(f"{keyword or 'Bài viết'} – tóm tắt ngắn:")
-    lines.append(f"- Giới thiệu nhanh về {keyword.lower() if keyword else 'chủ đề'}")
-    lines.append("- 3 lợi ích chính cho người đọc")
-    lines.append("- Gợi ý hành động (CTA) rõ ràng")
-    if source:
-        lines.append(f"\n➡️ Xem chi tiết: {source}")
+    # Bullets - thông tin quan trọng (random order + emojis)
+    bullets = [
+        (["🛡️","🔒","✅"], "Bảo mật thông tin tuyệt đối"),
+        (["⚡","🚀"], "Tốc độ truy cập ổn định, nhanh"),
+        (["🤝","🧰","🛟"], "Hỗ trợ khách hàng 24/7"),
+        (["🎮","🃏","🎲"], "Đa dạng trò chơi và sản phẩm"),
+        (["💳","💸"], "Nạp/rút linh hoạt, xử lý nhanh"),
+    ]
+    random.shuffle(bullets)
+    bullet_lines = []
+    for icons, text_item in bullets:
+        bullet_lines.append(f"{random.choice(icons)} {text_item}")
+    info_block_title = random.choice(["**Thông tin quan trọng:**", "**Thông tin nổi bật:**", "**Điểm đáng chú ý:**"])
+    info_block = info_block_title + "
+" + "
+".join(f"- {b}" for b in bullet_lines)
 
-    text = "\n".join(lines).strip()
+    # Liên hệ cố định
+    contact = "**Thông tin liên hệ:**
+SĐT: 0927395058
+Telegram: @cattien999"
+
+    # Hashtags cố định + mở rộng theo keyword
+    base_tags = [f"#{kw_upper}", f"#LinkChínhThức{kw_no_space}", f"#{kw_upper}AnToàn",
+                 f"#HỗTrợLấyLạiTiền{kw_upper}", f"#RútTiền{kw_upper}", f"#MởKhóaTàiKhoản{kw_upper}"]
+    more_tags_pool = [
+        f"#{kw_no_space}", f"#{kw_no_space}vn", f"#{kw_no_space}support", f"#{kw_no_space}tips",
+        "#caocuoc", "#giadinhgame", "#khuyenmai", "#trangchu",
+        "#thanhtoan", "#uytin", "#sukien", "#tuyetdoi",
+    ]
+    # chọn thêm 6 tag khác nhau (không trùng)
+    extra_tags = []
+    pool = more_tags_pool[:]
+    random.shuffle(pool)
+    for tag in pool:
+        if tag.lower() not in [t.lower() for t in base_tags] and len(extra_tags) < 6:
+            extra_tags.append(tag)
+    hashtags = " ".join(base_tags + extra_tags)
+
+    # Phần mô tả mở đầu khác nhau để tránh trùng lặp
+    openers = [
+        f"Truy cập vào link chính thức của {keyword} để không gặp vấn đề bị chặn. Kết nối mượt mà, giao dịch an toàn.",
+        f"Đây là đường dẫn hợp lệ của {keyword}, đảm bảo truy cập trơn tru và bảo mật dữ liệu.",
+        f"Vào {keyword} qua link đã xác minh để chơi/bảo trì ổn định, không gián đoạn.",
+        f"Link nhà cái {keyword} đã kiểm duyệt, dùng để đăng nhập nhanh và an toàn.",
+    ]
+    opener = random.choice(openers)
+    if extra_prompt:
+        opener += "
+
+" + extra_prompt.strip()
+
+    # Gộp bài
+    parts = [
+        line1, line2, "",
+        opener, "",
+        info_block, "",
+        contact, "",
+        "Hashtags:", hashtags
+    ]
+    text = "
+".join(parts).strip()
     return jsonify({"text": text})
 
 
