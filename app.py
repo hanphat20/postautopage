@@ -420,7 +420,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
 .bubble.right{background:#e8f3ff; border-color:#d6e9ff}
 .bubble .meta{font-size:12px; color:#666; margin-bottom:2px}
 .bubble .status{font-size:11px; color:#6b7280; margin-left:6px}
-        </style>
+        
+/* --- Added: make entire row clickable cursor hint --- */
+#pages .item, #inbox_pages .item { cursor: pointer; }
+#pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"] { cursor: pointer; }
+
+</style>
 </head>
 <body>
   <div class="container">
@@ -441,7 +446,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div class="status" id="pages_status" ></div>
         </div>
         <div class="card" style="margin-top:12px">
-          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="perpage_toggle"/> Dùng nội dung riêng cho từng Page</label>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="perpage_toggle"/> Dùng nội dung riêng cho từng Page (để trống = dùng nội dung chung)</label>
           <div id="perpage_container" class="list" style="display:none"></div>
         </div>
         <div class="card" style="margin-top:12px">
@@ -1313,6 +1318,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
 // Resume audio on first interaction to satisfy browser policies
 ['click','keydown','touchstart'].forEach(evt=>{
   window.addEventListener(evt, ()=>{ ensureAudioCtx(); }, {once:true, passive:true});
+});
+
+
+// --- Added: row-wide click toggles the checkbox (except direct control clicks) ---
+document.addEventListener('click', function(e){
+  const item = e.target.closest('#pages .item, #inbox_pages .item');
+  if(!item) return;
+  if(e.target.matches('input, button, a, textarea, select, label')) return;
+  const cb = item.querySelector('input[type="checkbox"]');
+  if(!cb) return;
+  cb.checked = !cb.checked;
+  cb.dispatchEvent(new Event('change', { bubbles: true }));
 });
 
 </script>
