@@ -5,6 +5,8 @@ import time
 import typing as t
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from flask import Flask, Response, jsonify, make_response, request
 
 # ------------------------ Config / Tokens ------------------------
@@ -17,6 +19,24 @@ DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
+
+FB_CONNECT_TIMEOUT = float(os.getenv("FB_CONNECT_TIMEOUT", "5"))
+FB_READ_TIMEOUT    = float(os.getenv("FB_READ_TIMEOUT", "45"))
+FB_RETRIES         = int(os.getenv("FB_RETRIES", "3"))
+FB_BACKOFF         = float(os.getenv("FB_BACKOFF", "0.5"))
+FB_POOL            = int(os.getenv("FB_POOL", "50"))
+
+# Reuse connections + retries
+session = requests.Session()
+retry = Retry(total=FB_RETRIES,
+              connect=FB_RETRIES,
+              read=FB_RETRIES,
+              backoff_factor=FB_BACKOFF,
+              status_forcelist=[429,500,502,503,504],
+              allowed_methods=frozenset(["GET","POST"]))
+adapter = HTTPAdapter(pool_connections=FB_POOL, pool_maxsize=FB_POOL, max_retries=retry)
+session.mount("https://", adapter)
+session.mount("http://", adapter)
 
 def _load_tokens() -> dict:
     """
@@ -62,7 +82,7 @@ FB_API = f"https://graph.facebook.com/{FB_VERSION}"
 
 def fb_get(path: str, params: dict, timeout: int = 30) -> dict:
     url = f"{FB_API}/{path.lstrip('/')}"
-    r = requests.get(url, params=params, timeout=timeout)
+    r = session.get(url, params=params, timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT))
     try:
         data = r.json()
     except Exception:
@@ -74,7 +94,7 @@ def fb_get(path: str, params: dict, timeout: int = 30) -> dict:
 
 def fb_post(path: str, data: dict, timeout: int = 30) -> dict:
     url = f"{FB_API}/{path.lstrip('/')}"
-    r = requests.post(url, data=data, timeout=timeout)
+    r = session.post(url, data=data, timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT))
     try:
         js = r.json()
     except Exception:
@@ -144,6 +164,7 @@ INDEX_HTML = r"""<!doctype html>
         <div class="col">
           <h3>Chọn Page (đa chọn)</h3>
           <div class="status" id="inbox_pages_status"></div>
+          <div class="row"><label class="checkbox"><input type="checkbox" id="inbox_select_all"> Chọn tất cả</label></div>
           <div class="pages-box" id="pages_box"></div>
           <div class="row" style="margin-top:8px">
             <label class="checkbox"><input type="checkbox" id="inbox_only_unread"> Chỉ chưa đọc</label>
@@ -153,7 +174,7 @@ INDEX_HTML = r"""<!doctype html>
         </div>
 
         <div class="col">
-          <h3>Hội thoại</h3>
+          <h3>Hội thoại <span id="unread_total" class="badge unread" style="display:none"></span></h3>
           <div class="status" id="inbox_conv_status"></div>
           <div class="list" id="conversations"></div>
           <div style="margin-top:12px">
@@ -174,6 +195,7 @@ INDEX_HTML = r"""<!doctype html>
     <div id="tab-posting" class="tab card" style="display:none">
       <h3>Đăng bài</h3>
       <div class="status" id="post_pages_status"></div>
+      <div class="row"><label class="checkbox"><input type="checkbox" id="post_select_all"> Chọn tất cả</label></div>
       <div class="pages-box" id="post_pages_box"></div>
       <div class="row" style="margin-top:8px">
         <textarea id="post_text" placeholder="Nội dung..."></textarea>
@@ -216,6 +238,26 @@ INDEX_HTML = r"""<!doctype html>
       box1.innerHTML = html; box2.innerHTML = html2;
       st1 && (st1.textContent = 'Tải ' + pages.length + ' page.'); 
       st2 && (st2.textContent = 'Tải ' + pages.length + ' page.');
+      // reset master checkboxes
+      const sa1 = $('#inbox_select_all'); const sa2 = $('#post_select_all');
+      if(sa1){ sa1.checked = false; sa1.onchange = () => {
+        const checked = sa1.checked; $all('.pg-inbox').forEach(cb => cb.checked = checked);
+      }; }
+      if(sa2){ sa2.checked = false; sa2.onchange = () => {
+        const checked = sa2.checked; $all('.pg-post').forEach(cb => cb.checked = checked);
+      }; }
+      // keep master in sync when user toggles individually
+      function syncMaster(groupSel, masterSel){
+        const allCbs = $all(groupSel);
+        if(!allCbs.length) return;
+        const master = $(masterSel); if(!master) return;
+        const update = () => { master.checked = allCbs.every(cb => cb.checked); };
+        allCbs.forEach(cb => cb.addEventListener('change', update));
+        update();
+      }
+      syncMaster('.pg-inbox', '#inbox_select_all');
+      syncMaster('.pg-post', '#post_select_all');
+
     }catch(e){
       st1 && (st1.textContent='Không tải được danh sách page');
       st2 && (st2.textContent='Không tải được danh sách page');
@@ -229,15 +271,27 @@ INDEX_HTML = r"""<!doctype html>
       const when = x.updated_time ? new Date(x.updated_time).toLocaleString('vi-VN') : '';
       const unread = (x.unread_count && x.unread_count>0);
       const badge = unread ? '<span class="badge unread">Chưa đọc '+(x.unread_count||'')+'</span>' : '<span class="badge">Đã đọc</span>';
+      // format senders
+      let senders = '(Không rõ)';
+      try{
+        if(x.senders && x.senders.data && Array.isArray(x.senders.data)){
+          senders = x.senders.data.map(s=>s.name||'').filter(Boolean).join(', ');
+        }else if(typeof x.senders === 'string'){
+          senders = x.senders;
+        }
+      }catch(e){}
       return '<div class="conv-item" data-idx="'+i+'">\
         <div>\
-          <div><b>'+(x.senders||'(Không rõ)')+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>\
+          <div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>\
           <div class="conv-meta">'+(x.snippet||'')+'</div>\
         </div>\
-        <div class="right" style="min-width:160px">'+when+'<br>'+badge+'</div>\
+        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(x.link?('<div style="margin-top:4px"><a target="_blank" href="'+x.link+'">Mở trên Facebook</a></div>'):'')+'</div>\
       </div>';
     }).join('') || '<div class="muted">Không có hội thoại.</div>';
     st && (st.textContent = 'Tải ' + items.length + ' hội thoại.');
+    const totalUnread = items.reduce((a,b)=>a+(b.unread_count||0),0);
+    const unreadBadge = $('#unread_total');
+    if(unreadBadge){ unreadBadge.style.display = ''; unreadBadge.textContent = 'Chưa đọc: '+totalUnread; }
     window.__convData = items;
   }
 
@@ -296,6 +350,7 @@ INDEX_HTML = r"""<!doctype html>
   });
 
   // Gửi reply
+  $('#reply_text')?.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); $('#btn_reply')?.click(); } });
   $('#btn_reply')?.addEventListener('click', async ()=>{
     const input = $('#reply_text'); const txt = (input.value||'').trim();
     const conv = window.__currentConv;
@@ -308,7 +363,12 @@ INDEX_HTML = r"""<!doctype html>
         body: JSON.stringify({conversation_id: conv.id, page_id: conv.page_id, user_id: conv.user_id||null, text: txt})
       });
       const d = await r.json();
-      if(d.error){ st.textContent=d.error; return; }
+      if(d.error){
+        const conv = window.__currentConv||{};
+        const fbLink = conv.link ? (' <a target="_blank" href="'+conv.link+'">Mở trên Facebook</a>') : '';
+        st.innerHTML = (d.error + fbLink);
+        return;
+      }
       input.value='';
       st.textContent='Đã gửi.';
       // refresh thread ngay
@@ -341,6 +401,12 @@ INDEX_HTML = r"""<!doctype html>
   }catch(e){}
 
   loadPages();
+  // Polling đơn giản mỗi 30s để cập nhật số lượng chưa đọc
+  setInterval(()=>{
+    const anyChecked = $all('.pg-inbox:checked').length>0;
+    if(anyChecked){ refreshConversations(); }
+  }, 30000);
+
   </script>
 </body>
 </html>"""
@@ -367,6 +433,9 @@ def api_pages():
 
 # ------------------------ API: Conversations ------------------------
 
+_CONV_CACHE = {}
+
+
 @app.route("/api/inbox/conversations")
 def api_inbox_conversations():
     try:
@@ -377,8 +446,14 @@ def api_inbox_conversations():
         only_unread = request.args.get("only_unread") in ("1", "true", "True")
         limit = int(request.args.get("limit", "25"))
 
+        # cache key
+        key = f"{','.join(sorted(page_ids))}|{int(only_unread)}|{limit}"
+        hit = _CONV_CACHE.get(key)
+        if hit and hit.get('expire',0) > time.time():
+            return jsonify({"data": hit['data']})
+
         conversations = []
-        fields = "updated_time,snippet,senders,unread_count,can_reply,participants"
+        fields = "updated_time,snippet,senders,unread_count,can_reply,participants,link"
         for pid in page_ids:
             token = get_page_token(pid)
             data = fb_get(f"{pid}/conversations", {
@@ -392,7 +467,6 @@ def api_inbox_conversations():
                 # pick user_id (PSID) from participants if available
                 try:
                     parts = c.get("participants", {}).get("data", [])
-                    # the user is whoever is not the page itself
                     uid = None
                     for p in parts:
                         if p.get("id") != pid:
@@ -405,11 +479,12 @@ def api_inbox_conversations():
                     continue
                 conversations.append(c)
 
-        def _key(c): return c.get("updated_time", "")
-        conversations.sort(key=_key, reverse=True)
+        conversations.sort(key=lambda c: c.get("updated_time", ""), reverse=True)
+        _CONV_CACHE[key] = {"expire": time.time()+12.0, "data": conversations}
         return jsonify({"data": conversations})
     except Exception as e:
         return jsonify({"error": str(e)})
+
 
 
 # ------------------------ API: Messages of a conversation ------------------------
