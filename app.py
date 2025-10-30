@@ -7,116 +7,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from flask import Flask, Response, jsonify, make_response, request
-import random
 
 # ------------------------ Config / Tokens ------------------------
-
-# ======================= POST GENERATOR =======================
-CONTACT_PHONE = "0927395058"
-CONTACT_TELE  = "@cattien999"
-
-_ICON_COMBOS = [
-    ("✨","🚀"), ("🌟","🔐"), ("💫","🌐"), ("🔥","✅"), ("⚡","🛡️"),
-    ("⭐","🚪"), ("🌈","🧭"), ("🎯","🧩"), ("🎉","🔗"), ("📣","🛰️")
-]
-_TITLE_SLOGANS = [
-    "Luôn Ổn Định & An Toàn",
-    "Không Bị Chặn – Truy Cập Mượt",
-    "Hỗ Trợ Tận Nơi, Giao Dịch An Tâm",
-    "Vào Nhanh – Bảo Mật Chuẩn Châu Âu",
-    "Chính Chủ – Trải Nghiệm Siêu Mượt"
-]
-_INTRO_VARIANTS = [
-    "Vào **link chính chủ của {kw}** để tránh chặn, thao tác nhanh và mượt. Chúng tôi **khẳng định hỗ trợ**: nạp/rút nhanh, rà soát giao dịch thất lạc, mở khoá kịp thời, xử lý lỗi rút tiền. Hệ thống **bảo mật nhiều lớp** theo tiêu chuẩn châu Âu, **minh bạch & tuân thủ** quy định.",
-    "Truy cập **đường dẫn chính thức {kw}** để duy trì kết nối ổn định. Đội ngũ **hỗ trợ chủ động**: tối ưu nạp–rút, kiểm tra giao dịch chênh lệch, hướng dẫn khắc phục lỗi rút, **mở khoá tài khoản** nhanh chóng. Nền tảng **mã hoá toàn diện** và vận hành theo **chuẩn châu Âu**.",
-    "Dùng **link chuẩn của {kw}** để đảm bảo tốc độ và tính sẵn sàng. Chúng tôi **cam kết đồng hành** 24/7: hỗ trợ nạp–rút, đối soát giao dịch, mở khoá tài khoản, xử lý các sự cố rút tiền. Công nghệ **bảo mật đa tầng** & **tuân thủ pháp lý** giúp an tâm giao dịch."
-]
-_SECTION_TITLE = ["🔎 Thông tin quan trọng", "🧭 Điểm hỗ trợ chính", "📌 Lưu ý hỗ trợ"]
-_BULLET_BANK = [
-    "⚡ **Nạp & rút nhanh**: theo dõi và duyệt giao dịch **24/7**.",
-    "🧾 **Sai lệch/thiếu tiền**: tiếp nhận – đối soát – **hoàn tiền khi xác minh**.",
-    "🛠️ **Không rút được tiền?** Kỹ thuật đồng hành, kiểm tra ví/ngân hàng & hướng dẫn khắc phục.",
-    "🔓 **Mở khoá tài khoản**: xác minh đơn giản, khôi phục truy cập an toàn.",
-    "🛡️ **Bảo mật & tuân thủ châu Âu**: mã hoá dữ liệu, quy trình minh bạch, bảo vệ quyền riêng tư.",
-    "🔗 **Link chuẩn không bị chặn**: có **đường dẫn dự phòng** để vào ngay khi cần."
-]
-_BULLET_ALTS = [
-    "⚡ **Nạp–rút siêu tốc**: xử lý yêu cầu liền mạch, trực 24/7.",
-    "🧾 **Rà soát chênh lệch số dư**: tiếp nhận, đối chiếu và **khôi phục khi có đủ căn cứ**.",
-    "🛠️ **Lỗi rút tiền**: hỗ trợ từng bước, xác minh trạng thái giao dịch từ hệ thống lẫn ngân hàng.",
-    "🔓 **Khôi phục tài khoản**: xác thực linh hoạt, mở khoá nhanh và an toàn.",
-    "🛡️ **Chuẩn bảo mật EU**: mã hoá mạnh, kiểm toán định kỳ, ưu tiên quyền riêng tư.",
-    "🔗 **Đường dẫn chính thức**: nhiều tuyến dự phòng, hạn chế gián đoạn truy cập."
-]
-_CORE_HASHTAGS = [
-    "#{kw}", "#LinkChinhThuc{kw}", "#{kw}AnToan", "#HoTroLayLaiTien{kw}", "#RutTien{kw}", "#MoKhoaTaiKhoan{kw}"
-]
-_EXTENDED_TAG_POOL = [
-    "#DangKy{kw}", "#NapRut{kw}", "#KhuyenMai{kw}", "#CSKH{kw}", "#HoTro24h{kw}", "#TaiApp{kw}", "#TrangChu{kw}",
-    "#LinkMoi{kw}", "#KhongChan{kw}", "#BaoMat{kw}", "#ThanhToan{kw}", "#TuVan{kw}", "#Live{kw}", "#UyTin{kw}",
-    "#TheThao{kw}", "#Casino{kw}", "#Slots{kw}", "#GameBai{kw}", "#DaiLy{kw}", "#QuyenLoi{kw}"
-]
-
-def _pick_icons():
-    l1, r1 = random.choice(_ICON_COMBOS)
-    l2, r2 = random.choice(_ICON_COMBOS)
-    while (l2, r2) == (l1, r1):
-        l2, r2 = random.choice(_ICON_COMBOS)
-    return l1 + l2, r1 + r2
-
-def _build_title(kw: str):
-    left, right = _pick_icons()
-    slogan = random.choice(_TITLE_SLOGANS)
-    return f"{left} **Truy Cập Link {kw} Chính Thức – {slogan}** {right}"
-
-def _build_line2(kw: str, link: str):
-    return f"#{kw} 🔗 **{link}**"
-
-def _build_intro(kw: str, prompt: str = ""):
-    base = random.choice(_INTRO_VARIANTS).format(kw=kw)
-    if prompt.strip():
-        base += f" {prompt.strip()}."
-    return base
-
-def _build_bullets():
-    base = random.sample(_BULLET_BANK, k=3)
-    alts = random.sample(_BULLET_ALTS, k=3)
-    pool = base + alts
-    k = random.randint(4, 6)
-    return random.sample(pool, k=k)
-
-def _build_hashtags(kw: str):
-    core = [t.format(kw=kw) for t in _CORE_HASHTAGS]
-    ext_pool = [t.format(kw=kw) for t in _EXTENDED_TAG_POOL]
-    ext = random.sample(ext_pool, k=random.randint(8, 12))
-    tags = core + ext
-    random.shuffle(tags)
-    half = len(tags)//2
-    return " ".join(tags[:half]) + "\\n" + " ".join(tags[half:])
-
-def generate_post_text(keyword: str, link: str, prompt: str = "") -> str:
-    kw = (keyword or "KEYWORD").strip()
-    lk = (link or "LINK").strip()
-    title = _build_title(kw)
-    line2 = _build_line2(kw, lk)
-    intro = _build_intro(kw, prompt)
-    section = random.choice(_SECTION_TITLE)
-    bullets_text = "\\n".join(f"- {b}" for b in _build_bullets())
-    contact = (
-        "**📞 Thông tin liên hệ hỗ trợ:**\\n"
-        f"☎️ SDT: **{CONTACT_PHONE}**\\n"
-        f"✉️ Telegram: **{CONTACT_TELE}**"
-    )
-    hashtags = _build_hashtags(kw)
-    return "\\n".join([
-        "---", title, line2, "",
-        intro, "",
-        f"**{section}:**", bullets_text, "",
-        contact, "",
-        hashtags, "---"
-    ])
-# ======================= END POST GENERATOR =======================
-
 
 VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "1234")
 SECRET_KEY = os.getenv("SECRET_KEY", "changeme")
@@ -888,11 +780,26 @@ def api_ai_generate():
     if not keyword and not source:
         return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
 
-    try:
-        out = generate_post_text(keyword or "KEYWORD", source or "LINK", prompt)
-        return jsonify({"text": out})
-    except Exception as e:
-        return jsonify({"error": f"Lỗi tạo nội dung: {e}"}), 500
+    lines = []
+    if keyword:
+        lines.append(f"📌 Chủ đề: {keyword}")
+    if source:
+        lines.append(f"🔗 Tham khảo: {source}")
+    if prompt:
+        lines.append("")
+        lines.append(f"Yêu cầu thêm: {prompt}")
+
+    lines.append("")
+    lines.append("———")
+    lines.append(f"{keyword or 'Bài viết'} – tóm tắt ngắn:")
+    lines.append(f"- Giới thiệu nhanh về {keyword.lower() if keyword else 'chủ đề'}")
+    lines.append("- 3 lợi ích chính cho người đọc")
+    lines.append("- Gợi ý hành động (CTA) rõ ràng")
+    if source:
+        lines.append(f"\n➡️ Xem chi tiết: {source}")
+
+    text = "\n".join(lines).strip()
+    return jsonify({"text": text})
 
 
 # ------------------------ Upload (optional for media local) ------------------------
