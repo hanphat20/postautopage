@@ -763,11 +763,17 @@ def api_settings_save():
 
 
 # ------------------------ API: AI generate from settings ------------------------
+
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
+    """
+    Generate post text in the FB-form style using keyword & source from Settings.
+    Adds light randomization to reduce duplication and stores recent hashes to avoid reposting
+    identical texts (per page).
+    """
     js = request.get_json(force=True) or {}
-    page_id = js.get("page_id") or ""
-    prompt = (js.get("prompt") or "").strip()
+    page_id = (js.get("page_id") or "").strip()
+    prompt  = (js.get("prompt")  or "").strip()
 
     if not page_id:
         return jsonify({"error": "Chưa chọn Page"})
@@ -775,34 +781,136 @@ def api_ai_generate():
     settings = _load_settings()
     conf = settings.get(page_id) or {}
     keyword = (conf.get("keyword") or "").strip()
-    source  = (conf.get("source") or "").strip()
+    source  = (conf.get("source")  or "").strip()
 
     if not keyword and not source:
         return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
 
+    # Optional overrides/metadata
+    brand    = (js.get("brand") or "").strip()
+    hotline  = (js.get("hotline") or "").strip()
+    telegram = (js.get("telegram") or "").strip()
+    hashtags = (js.get("hashtags") or "").strip()
+    cta      = (js.get("cta") or "Đăng ký / Đăng nhập ngay").strip()
+
+    # --- Randomization helpers (to avoid duplicates) ---
+    import random
+    random.seed(time.time_ns() % (2**32-1))
+
+    stars = random.choice(["🌟", "✨", "💫", "⭐️"])
+    shield = random.choice(["🛡️", "🔒", "✅"])
+    rocket = random.choice(["🚀", "➡️", "👉"])
+    dot    = random.choice(["•", "-", "–"])
+
+    # Flexible phrasings
+    opening_variants = [
+        "{stars} {brand}{kw} Chính Thức – Không Bị Chặn {stars}",
+        "{stars} Truy cập {brand}{kw} bản chính thức – truy cập mượt mà {stars}",
+        "{stars} Link {brand}{kw} chuẩn – không lo chặn {stars}",
+    ]
+    subline_variants = [
+        "#{tag} {src}",
+        "Link chuẩn: {src}",
+        "Trang chính thức: {src}",
+    ]
+    intro_variants = [
+        f"Truy cập link chính thức để không gặp vấn đề bảo mật hay bị chặn. {shield} Đảm bảo giao dịch mượt mà và không bị gián đoạn.",
+        f"Vào đúng link để tránh rủi ro chặn/giả mạo. {shield} Kết nối ổn định, an toàn.",
+        f"Dùng link xác thực để trải nghiệm trơn tru và an toàn. {shield}",
+    ]
+    bullet_groups = [
+        [
+            "Truy cập nhanh, không lỗi chặn trang.",
+            "Đội ngũ hỗ trợ giúp lấy lại tiền nếu nhập sai link.",
+            "Hỗ trợ mở khoá tài khoản và rút tiền nhanh chóng.",
+        ],
+        [
+            "Đi đúng link, hạn chế rủi ro bảo mật.",
+            "CSKH 24/7 sẵn sàng xử lý sự cố.",
+            "Rút/nạp mượt, xác minh nhanh.",
+        ],
+        [
+            "Tối ưu tốc độ truy cập, hạn chế gián đoạn.",
+            "Hướng dẫn chi tiết khi gặp lỗi.",
+            "Bảo vệ tài khoản, khôi phục kịp thời.",
+        ],
+    ]
+
+    # Build text
     lines = []
-    if keyword:
-        lines.append(f"📌 Chủ đề: {keyword}")
+    title_tpl = random.choice(opening_variants)
+    title = title_tpl.format(stars=stars, brand=(brand + " - " if brand else ""), kw=keyword)
+    lines.append(title)
+
     if source:
-        lines.append(f"🔗 Tham khảo: {source}")
+        sub_tpl = random.choice(subline_variants)
+        lines.append(sub_tpl.format(tag=keyword.replace(" ", ""), src=source))
+
+    lines.append("")
+    lines.append(random.choice(intro_variants))
+
+    lines.append("")
+    lines.append("Thông tin quan trọng:")
+    for b in random.choice(bullet_groups):
+        lines.append(f"{dot} {b}")
+
+    if hotline or telegram:
+        lines.append("")
+        lines.append("Thông tin liên hệ hỗ trợ:")
+        if hotline:  lines.append(f"SDT: {hotline}")
+        if telegram: lines.append(f"Telegram: {telegram}")
+
+    if hashtags:
+        # Shuffle order a bit to avoid exact duplicates
+        tags = [t for t in hashtags.split() if t.startswith("#")]
+        random.shuffle(tags)
+        if tags:
+            lines.append("")
+            lines.append("Hashtags:")
+            lines.append(" ".join(tags))
+
+    if source:
+        lines.append("")
+        lines.append(f"{rocket} {cta}: {source}")
+
     if prompt:
         lines.append("")
         lines.append(f"Yêu cầu thêm: {prompt}")
 
-    lines.append("")
-    lines.append("———")
-    lines.append(f"{keyword or 'Bài viết'} – tóm tắt ngắn:")
-    lines.append(f"- Giới thiệu nhanh về {keyword.lower() if keyword else 'chủ đề'}")
-    lines.append("- 3 lợi ích chính cho người đọc")
-    lines.append("- Gợi ý hành động (CTA) rõ ràng")
-    if source:
-        lines.append(f"\n➡️ Xem chi tiết: {source}")
+    text = "\\n".join(lines).strip()
 
-    text = "\n".join(lines).strip()
+    # --- Deduplicate check per page (store rolling hashes) ---
+    hist_path = "/mnt/data/post_history.json"
+    try:
+        with open(hist_path, "r", encoding="utf-8") as f:
+            hist = json.load(f)
+    except Exception:
+        hist = {}
+
+    def _hash(s: str) -> str:
+        import hashlib
+        return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+    page_hist = hist.get(page_id, [])[:100]  # keep last 100
+    h = _hash(text)
+    # If duplicate, tweak with a tiny variation once
+    if h in page_hist:
+        lines.append("\\nP/S: {0}".format(random.choice([
+            "Ưu đãi cập nhật mỗi ngày.", "Đừng quên kiểm tra tin nhắn hỗ trợ.", "Giữ đường link để truy cập nhanh."
+        ])))
+        text = "\\n".join(lines).strip()
+        h = _hash(text)
+
+    page_hist = [h] + page_hist
+    hist[page_id] = page_hist[:100]
+    try:
+        with open(hist_path, "w", encoding="utf-8") as f:
+            json.dump(hist, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
     return jsonify({"text": text})
 
-
-# ------------------------ Upload (optional for media local) ------------------------
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     """Simple local upload to /mnt/data and return path for later"""
