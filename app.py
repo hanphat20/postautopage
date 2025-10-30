@@ -257,7 +257,7 @@ INDEX_HTML = r"""<!doctype html>
       <div class="muted">Webhook URL: <code>/webhook/events</code> · SSE: <code>/stream/messages</code></div>
       <div class="status" id="settings_status"></div>
       <div id="settings_box" class="pages-box"></div>
-      <div class="row"><button class="btn primary" id="btn_settings_save">Lưu cài đặt</button></div>
+      <div class="row" style="gap:8px;align-items:center"><button class="btn primary" id="btn_settings_save">Lưu cài đặt</button><button class="btn" id="btn_settings_export">Xuất CSV</button><label class="btn" for="settings_import" style="cursor:pointer">Nhập CSV</label><input type="file" id="settings_import" accept=".csv" style="display:none"></div>
     </div>
   </div>
 
@@ -526,6 +526,21 @@ INDEX_HTML = r"""<!doctype html>
     }catch(e){ st.textContent = 'Lỗi lưu'; }
   });
 
+  // Export CSV
+  $('#btn_settings_export')?.addEventListener('click', ()=>{ window.location.href = '/api/settings/export'; });
+
+  // Import CSV
+  $('#settings_import')?.addEventListener('change', async (ev)=>{
+    const f = ev.target.files?.[0]; if(!f) return; const st = $('#settings_status');
+    const fd = new FormData(); fd.append('file', f);
+    try{
+      const r = await fetch('/api/settings/import', {method:'POST', body: fd});
+      const d = await r.json();
+      if(d.error){ st.textContent = d.error; return; }
+      st.textContent = 'Đã nhập ' + (d.updated||0) + ' dòng.'; loadSettings();
+    }catch(e){ st.textContent='Lỗi nhập CSV'; }
+  });
+
   // Polling đơn giản mỗi 30s để cập nhật số lượng chưa đọc
   setInterval(()=>{
     const anyChecked = $all('.pg-inbox:checked').length>0;
@@ -742,6 +757,59 @@ def api_settings_save():
     return jsonify({"ok": True})
 
 
+@app.route("/api/settings/export")
+def api_settings_export():
+    """Export current settings to CSV (id,name,keyword,source)."""
+    import csv
+    from io import StringIO
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id","name","keyword","source"])
+    data = _load_settings()
+    # include names
+    for pid, token in PAGE_TOKENS.items():
+        try:
+            info = fb_get(pid, {"access_token": token, "fields": "name"})
+            name = info.get("name", f"Page {pid}")
+        except Exception:
+            name = f"Page {pid}"
+        conf = data.get(pid) or {}
+        writer.writerow([pid, name, conf.get("keyword",""), conf.get("source","")])
+    csv_text = output.getvalue()
+    from flask import Response
+    return Response(csv_text, mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=settings.csv"})
+
+@app.route("/api/settings/import", methods=["POST"])
+def api_settings_import():
+    """Import settings from uploaded CSV with headers id,keyword,source (name optional)."""
+    import csv
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "Thiếu file CSV"})
+    content = file.read().decode("utf-8", errors="ignore")
+    rdr = csv.DictReader(content.splitlines())
+    data = _load_settings()
+    count = 0
+    for row in rdr:
+        pid = (row.get("id") or "").strip()
+        if not pid:
+            continue
+        if pid not in PAGE_TOKENS:
+            # skip unknown page ids
+            continue
+        keyword = (row.get("keyword") or row.get("tukhoa") or "").strip()
+        source  = (row.get("source")  or row.get("link")   or "").strip()
+        if pid not in data:
+            data[pid] = {}
+        if keyword or source:
+            data[pid]["keyword"] = keyword
+            data[pid]["source"]  = source
+            count += 1
+    _save_settings(data)
+    return jsonify({"ok": True, "updated": count})
+
+
 # ------------------------ API: AI generate from settings ------------------------
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
@@ -875,6 +943,59 @@ def webhook_events():
         return Response("forbidden", status=403)
     # POST: just acknowledge
     return jsonify({"ok": True})
+
+
+@app.route("/api/settings/export")
+def api_settings_export():
+    """Export current settings to CSV (id,name,keyword,source)."""
+    import csv
+    from io import StringIO
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id","name","keyword","source"])
+    data = _load_settings()
+    # include names
+    for pid, token in PAGE_TOKENS.items():
+        try:
+            info = fb_get(pid, {"access_token": token, "fields": "name"})
+            name = info.get("name", f"Page {pid}")
+        except Exception:
+            name = f"Page {pid}"
+        conf = data.get(pid) or {}
+        writer.writerow([pid, name, conf.get("keyword",""), conf.get("source","")])
+    csv_text = output.getvalue()
+    from flask import Response
+    return Response(csv_text, mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=settings.csv"})
+
+@app.route("/api/settings/import", methods=["POST"])
+def api_settings_import():
+    """Import settings from uploaded CSV with headers id,keyword,source (name optional)."""
+    import csv
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "Thiếu file CSV"})
+    content = file.read().decode("utf-8", errors="ignore")
+    rdr = csv.DictReader(content.splitlines())
+    data = _load_settings()
+    count = 0
+    for row in rdr:
+        pid = (row.get("id") or "").strip()
+        if not pid:
+            continue
+        if pid not in PAGE_TOKENS:
+            # skip unknown page ids
+            continue
+        keyword = (row.get("keyword") or row.get("tukhoa") or "").strip()
+        source  = (row.get("source")  or row.get("link")   or "").strip()
+        if pid not in data:
+            data[pid] = {}
+        if keyword or source:
+            data[pid]["keyword"] = keyword
+            data[pid]["source"]  = source
+            count += 1
+    _save_settings(data)
+    return jsonify({"ok": True, "updated": count})
 
 
 # ------------------------ SSE (dummy) ------------------------
