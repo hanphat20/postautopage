@@ -11,19 +11,9 @@ import random
 
 # ------------------------ Config / Tokens ------------------------
 
-VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "1234")
-SECRET_KEY = os.getenv("SECRET_KEY", "changeme")
-TOKENS_FILE = os.getenv("TOKENS_FILE", "/etc/secrets/tokens.json")
-DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
-
-app = Flask(__name__)
-app.secret_key = SECRET_KEY
-
-# ------------------------ Utilities ------------------------
-
-# ---- Post Generator (anti-duplication, icon & phrasing variance) ----
+# ======================= POST GENERATOR =======================
 CONTACT_PHONE = "0927395058"
-CONTACT_TELE = "@cattien999"
+CONTACT_TELE  = "@cattien999"
 
 _ICON_COMBOS = [
     ("✨","🚀"), ("🌟","🔐"), ("💫","🌐"), ("🔥","✅"), ("⚡","🛡️"),
@@ -84,9 +74,8 @@ def _build_line2(kw: str, link: str):
 
 def _build_intro(kw: str, prompt: str = ""):
     base = random.choice(_INTRO_VARIANTS).format(kw=kw)
-    prompt = (prompt or "").strip()
-    if prompt:
-        base += f" {prompt}."
+    if prompt.strip():
+        base += f" {prompt.strip()}."
     return base
 
 def _build_bullets():
@@ -106,38 +95,36 @@ def _build_hashtags(kw: str):
     return " ".join(tags[:half]) + "\\n" + " ".join(tags[half:])
 
 def generate_post_text(keyword: str, link: str, prompt: str = "") -> str:
-    kw = keyword.strip()
-    lk = link.strip()
+    kw = (keyword or "KEYWORD").strip()
+    lk = (link or "LINK").strip()
     title = _build_title(kw)
     line2 = _build_line2(kw, lk)
     intro = _build_intro(kw, prompt)
     section = random.choice(_SECTION_TITLE)
-    bullets = _build_bullets()
-    bullets_text = "\\n".join([f"- {b}" for b in bullets])
+    bullets_text = "\\n".join(f"- {b}" for b in _build_bullets())
     contact = (
         "**📞 Thông tin liên hệ hỗ trợ:**\\n"
-        "☎️ SDT: **%(phone)s**\\n"
-        "✉️ Telegram: **%(tele)s**"
-    ) % {"phone": CONTACT_PHONE, "tele": CONTACT_TELE}
+        f"☎️ SDT: **{CONTACT_PHONE}**\\n"
+        f"✉️ Telegram: **{CONTACT_TELE}**"
+    )
     hashtags = _build_hashtags(kw)
+    return "\\n".join([
+        "---", title, line2, "",
+        intro, "",
+        f"**{section}:**", bullets_text, "",
+        contact, "",
+        hashtags, "---"
+    ])
+# ======================= END POST GENERATOR =======================
 
-    parts = [
-        "---",
-        title,
-        line2,
-        "",
-        intro,
-        "",
-        f"**{section}:**",
-        bullets_text,
-        "",
-        contact,
-        "",
-        hashtags,
-        "---"
-    ]
-    return "\\n".join(parts)
-# ---- End Post Generator ----
+
+VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "1234")
+SECRET_KEY = os.getenv("SECRET_KEY", "changeme")
+TOKENS_FILE = os.getenv("TOKENS_FILE", "/etc/secrets/tokens.json")
+DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
+
+app = Flask(__name__)
+app.secret_key = SECRET_KEY
 
 
 SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/mnt/data/page_settings.json')
@@ -902,10 +889,10 @@ def api_ai_generate():
         return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
 
     try:
-        text_out = generate_post_text(keyword or "KEYWORD", source or "LINK", prompt)
+        out = generate_post_text(keyword or "KEYWORD", source or "LINK", prompt)
+        return jsonify({"text": out})
     except Exception as e:
-        return jsonify({"error": f"Lỗi tạo nội dung: {e}"})
-    return jsonify({"text": text_out})
+        return jsonify({"error": f"Lỗi tạo nội dung: {e}"}), 500
 
 
 # ------------------------ Upload (optional for media local) ------------------------
