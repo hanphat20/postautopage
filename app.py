@@ -302,1207 +302,267 @@ def _ensure_link_in_text(text: str, link: str, keyword: str) -> str:
 # ----------------------------
 # UI
 # ----------------------------
-INDEX_HTML = r"""<!DOCTYPE html>
+INDEX_HTML = r"""<!doctype html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Bản quyền AKUTA (2025)</title>
-  <style>
-    :root{
-      --bg:#f6f7f9; --card-bg:#ffffff; --text:#222; --muted:#6b7280; --border:#e6e8eb;
-      --primary:#1976d2; --radius:10px; --shadow:0 6px 18px rgba(10,10,10,.06);
-    }
-    *{box-sizing:border-box} html,body{height:100%}
-    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:var(--bg);color:var(--text)}
-    .container{max-width:1120px;margin:12px auto;padding:0 12px}
-    h1{margin:0 0 8px;font-size:20px}
-    h3{margin:0 0 6px;font-size:14px}
-    .tabs{position:sticky;top:0;z-index:10;display:flex;gap:8px;padding:8px 0;background:var(--bg);border-bottom:1px solid var(--border)}
-    .tabs button{padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer;font-size:13px;line-height:1}
-    .tabs button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
-    .panel{display:none}.panel.active{display:block}
-    .row{display:flex;gap:10px;flex-wrap:wrap}.col{flex:1 1 440px;min-width:340px}
-    textarea,input,select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);font-size:14px;outline:none}
-    textarea{resize:vertical} input[type="file"]{padding:6px}
-    .card{border:1px solid var(--border);background:var(--card-bg);border-radius:var(--radius);padding:10px;box-shadow:var(--shadow)}
-    .list{padding:2px;max-height:280px;overflow:auto;background:#fafafa;border-radius:10px;border:1px dashed var(--border);overscroll-behavior:contain}
-    .item{padding:6px 8px;border-bottom:1px dashed var(--border)}
-    
-
-
-.btn{padding:6px 10px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-size:13px}
-    .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
-    .grid{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(220px,1fr))}
-    .toolbar{display:flex;gap:6px;flex-wrap:wrap}
-.inbox-list{padding:4px;border:1px dashed var(--border);border-radius:10px;background:#fafafa;overflow:auto;max-height:480px}
-.conv-item{padding:8px;border-bottom:1px dashed var(--border);display:flex;justify-content:space-between;gap:8px}
-.conv-meta{font-size:12px;color:#666}
-.badge{display:inline-block;padding:2px 6px;border-radius:999px;border:1px solid var(--border)}
-.badge.unread{background:#ffeaea}
-.saved-row{padding:8px}
-.saved-row .grid{grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr}
-.saved-row .meta{font-size:12px;color:#666}
-.list .item{padding:6px 8px}
-
-
-
-.list .item label{display:block; position:static; padding-right:0}
-.list .item label span{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.list .item input[type="checkbox"]{position:static; margin:0}
-
-
-    @media (max-width: 900px){
-      .col{flex:1 1 100%; min-width:0}
-      .grid{grid-template-columns:1fr !important}
-      .tabs{gap:6px}
-      .tabs button{font-size:12px}
-    }
-  
-
-
-
-
-
-
-/* FORCE checkbox at far right with GRID layout */
-#pages .item, #inbox_pages .item{
-  display: grid;
-  grid-template-columns: 1fr auto; /* name | checkbox */
-  align-items: center;
-  gap: 8px;
-}
-#pages .item label, #inbox_pages .item label{
-  overflow: hidden;
-}
-#pages .item label span, #inbox_pages .item label span{
-  display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-}
-#pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"]{
-  justify-self: end;
-}
-
-
-/* === FIX: Force checkbox to end of row & reset absolute positioning === */
-#pages .item input[type="checkbox"],
-#inbox_pages .item input[type="checkbox"]{
-  position: static !important;
-  top: auto !important;
-  right: auto !important;
-  transform: none !important;
-  margin: 0;
-  justify-self: end;
-}
-
-
-/* === STRONG OVERRIDE for fanpage/inbox rows === */
-#pages .item, #inbox_pages .item{
-  display: grid !important;
-  grid-template-columns: 1fr 32px !important;
-  align-items: center !important;
-  gap: 8px !important;
-}
-#pages .item label, #inbox_pages .item label{
-  position: static !important;
-  padding-right: 0 !important;
-  overflow: hidden !important;
-}
-#pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"]{
-  position: static !important;
-  top: auto !important;
-  right: auto !important;
-  transform: none !important;
-  margin: 0 !important;
-  justify-self: end !important;
-}
-
-
-/* Pro bubble styles */
-.bubble{max-width:72%; padding:8px 10px; border:1px solid #eaeaea; border-radius:12px; background:#fff}
-.bubble.right{background:#e8f3ff; border-color:#d6e9ff}
-.bubble .meta{font-size:12px; color:#666; margin-bottom:2px}
-.bubble .status{font-size:11px; color:#6b7280; margin-left:6px}
-        
-/* --- Added: make entire row clickable cursor hint --- */
-#pages .item, #inbox_pages .item { cursor: pointer; }
-#pages .item input[type="checkbox"], #inbox_pages .item input[type="checkbox"] { cursor: pointer; }
-
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bản quyền AKUTA (2025)</title>
+<style>
+body{font-family:system-ui,Segoe UI,Roboto,Arial,Helvetica,sans-serif;margin:0;background:#fafafa;color:#111}
+.container{max-width:1120px;margin:24px auto;padding:0 16px}
+h1{font-size:22px;margin:0 0 16px}
+.tabs{display:flex;gap:8px;margin-bottom:16px}
+.tabs button{border:1px solid #ddd;background:#fff;padding:8px 12px;border-radius:8px;cursor:pointer}
+.tabs button.active{background:#111;color:#fff;border-color:#111}
+.grid{display:grid;grid-template-columns:320px 1fr;gap:16px}
+.card{background:#fff;border:1px solid #eee;border-radius:12px;padding:12px}
+.card h3{margin:0 0 8px;font-size:16px}
+.muted{color:#666;font-size:13px}
+.status{font-size:13px;color:#444;margin:8px 0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.col{display:flex;flex-direction:column;gap:6px}
+.btn{padding:8px 12px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer}
+.btn.primary{background:#111;color:#fff;border-color:#111}
+.list{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto;border:1px dashed #eee;border-radius:8px;padding:8px}
+.conv-item{display:flex;justify-content:space-between;gap:8px;border:1px solid #eee;border-radius:8px;padding:8px;cursor:pointer;background:#fcfcfc}
+.conv-item:hover{background:#f5f5f5}
+.conv-meta{color:#666;font-size:12px}
+.badge{display:inline-block;font-size:12px;border:1px solid #ddd;padding:0 6px;border-radius:999px}
+.badge.unread{border-color:#e91e63;color:#e91e63}
+.bubble{max-width:82%;background:#f1f3f5;border:1px solid #e9ecef;border-radius:14px;padding:8px 10px}
+.bubble.right{background:#111;color:#fff;border-color:#111}
+.meta{font-size:12px;color:#666;margin-bottom:4px}
+#thread_messages{height:380px;overflow:auto;border:1px dashed #eee;border-radius:8px;padding:8px;background:#fff}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input[type="text"],textarea{border:1px solid #ddd;border-radius:8px;padding:8px}
+textarea{width:100%;min-height:72px}
+.pages-box{max-height:260px;overflow:auto;border:1px dashed #eee;border-radius:8px;padding:8px;background:#fff}
+label.checkbox{display:flex;align-items:center;gap:8px;padding:6px;border-radius:6px;cursor:pointer}
+label.checkbox:hover{background:#f7f7f7}
+.right{text-align:right}
+.sendbar{display:flex;gap:8px;margin-top:8px}
+.sendbar input{flex:1}
 </style>
 </head>
 <body>
-  <div class="container">
+<div class="container">
   <h1>Bản quyền AKUTA (2025)</h1>
   <div class="tabs">
-    <button id="tab-posts" class="active">Đăng bài</button>
-    <button id="tab-inbox">Tin nhắn</button>
-    <button id="tab-settings">Cài đặt</button>
-    </div>
+    <button class="tab-btn active" data-tab="inbox">Tin nhắn</button>
+    <button class="tab-btn" data-tab="posting">Đăng bài</button>
+    <button class="tab-btn" data-tab="settings">Cài đặt</button>
+  </div>
 
-  <div id="panel-posts" class="panel active">
-    <div class="row">
+  <div id="tab-inbox" class="tab card">
+    <div class="grid">
       <div class="col">
-        <div class="card">
-          <h3>Fanpage</h3>
-          <div class="list" id="pages"></div>
-          <div class="toolbar" style="margin-top:8px"><label><input type="checkbox" id="pages_select_all"/> Chọn tất cả</label></div>
-          <div class="status" id="pages_status" ></div>
+        <h3>Chọn Page (đa chọn)</h3>
+        <div class="status" id="inbox_pages_status"></div>
+        <div class="row"><label class="checkbox"><input type="checkbox" id="inbox_select_all"> Chọn tất cả</label></div>
+        <div class="pages-box" id="pages_box"></div>
+        <div class="row" style="margin-top:8px">
+          <label class="checkbox"><input type="checkbox" id="inbox_only_unread"> Chỉ chưa đọc</label>
+          <button class="btn" id="btn_inbox_refresh">Tải hội thoại</button>
         </div>
-        <div class="card" style="margin-top:12px">
-          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="perpage_toggle"/> Dùng nội dung riêng cho từng Page (để trống = dùng nội dung chung)</label>
-          <div id="perpage_container" class="list" style="display:none"></div>
-        </div>
-        <div class="card" style="margin-top:12px">
-          <h3>AI soạn nội dung</h3>
-          <textarea id="ai_prompt" rows="4" placeholder="Gợi ý chủ đề, ưu đãi, CTA..."></textarea>
-          <div class="grid">
-            <input id="ai_keyword" placeholder="Từ khoá chính (VD: MB66)"/>
-            <input id="ai_link" placeholder="Link chính thức (VD: https://...)"/>
-          </div>
-          <div class="grid">
-            <select id="ai_tone">
-              <option value="thân thiện">Giọng: Thân thiện</option>
-              <option value="chuyên nghiệp">Chuyên nghiệp</option>
-              <option value="hài hước">Hài hước</option>
-            </select>
-            <select id="ai_length">
-              <option value="ngắn">Ngắn</option>
-              <option value="vừa" selected>Vừa</option>
-              <option value="dài">Dài</option>
-            </select>
-          </div>
-          <div class="toolbar" style="margin-top:8px">
-            <button class="btn" id="btn_ai">Tạo nội dung</button>
-            <button class="btn" id="btn_ai_use_settings">Dùng cài đặt page → chèn</button>
-            <span class="muted">Cần OPENAI_API_KEY</span>
-          </div>
-          <div class="status" id="ai_status"></div>
-        </div>
+        <div class="muted">Âm báo <input type="checkbox" id="inbox_sound" checked></div>
       </div>
       <div class="col">
-        <div class="card">
-          <h3>Đăng nội dung</h3>
-          <textarea id="post_text" style="min-height:120px" rows="6" placeholder="Nội dung bài viết..."></textarea>
-          <div class="grid" style="margin-top:8px">
-            <div>
-              <label>Loại đăng</label>
-              <select id="post_type">
-                <option value="feed">Feed</option>
-                <option value="reels">Reels</option>
-              </select>
-            </div>
-            <div>
-              <label>Video</label>
-              <input type="file" id="video_input" accept="video/*"/>
-            </div>
+        <h3>Hội thoại <span id="unread_total" class="badge unread" style="display:none"></span></h3>
+        <div class="status" id="inbox_conv_status"></div>
+        <div class="list" id="conversations"></div>
+        <div style="margin-top:12px">
+          <div class="toolbar">
+            <strong id="thread_header">Chưa chọn hội thoại</strong>
+            <span class="status" id="thread_status"></span>
           </div>
-          <div class="grid" style="margin-top:8px">
-            <input type="file" id="photo_input" accept="image/*"/>
-            <input type="text" id="media_caption" placeholder="Caption (tuỳ chọn)"/>
+          <div id="thread_messages"></div>
+          <div class="sendbar">
+            <input type="text" id="reply_text" placeholder="Nhập tin nhắn trả lời... (Enter để gửi)">
+            <button class="btn primary" id="btn_reply">Gửi</button>
           </div>
-          <div class="toolbar" style="margin-top:8px">
-            <button class="btn primary" id="btn_publish">Đăng</button>
-            <button class="btn" id="btn_auto_post" style="margin-left:8px">Tự viết & đăng (ảnh + bài)</button>
-          </div>
-          <div class="status" id="post_status"></div>
-          <div id="post_progress_wrap" style="margin-top:8px;display:none">
-            <div class="muted" id="post_progress_text">Đang đăng...</div>
-            <div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;margin-top:6px"><div id="post_progress_bar" style="height:6px;width:0%"></div></div>
-          </div>
-          <div class="toolbar" style="margin-top:8px">
-            <button class="btn" id="btn_export_results" disabled>Tải kết quả (.xlsx)</button>
-          </div>
-          <div id="post_results" class="list" style="margin-top:8px"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="panel-inbox" class="panel">
+  <div id="tab-posting" class="tab card" style="display:none">
+    <h3>Đăng bài</h3>
+    <div class="status" id="post_pages_status"></div>
+    <div class="row"><label class="checkbox"><input type="checkbox" id="post_select_all"> Chọn tất cả</label></div>
+    <div class="pages-box" id="post_pages_box"></div>
+    <div class="row" style="margin-top:8px">
+      <textarea id="ai_prompt" placeholder="Prompt để AI viết bài..."></textarea>
+      <div class="row">
+        <button class="btn" id="btn_ai_generate">Tạo nội dung bằng AI</button>
+        <button class="btn" id="btn_ai_generate_from_settings">Dùng cài đặt Page</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <textarea id="post_text" placeholder="Nội dung (có thể chỉnh sau khi AI tạo)..."></textarea>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label class="checkbox"><input type="radio" name="post_type" value="feed" checked> Đăng lên Feed (text/ảnh)</label>
+      <label class="checkbox"><input type="radio" name="post_type" value="video"> Đăng Video (Reels)</label>
+    </div>
     <div class="row">
-      <div class="col">
-        <div class="card">
-          <h3>Chọn Page (đa chọn)</h3>
-          <div id="inbox_pages" class="list"></div>
-          <div class="toolbar" style="margin-top:8px">
-            <label><input type="checkbox" id="inbox_pages_select_all" /> Chọn tất cả</label>
-            <label><input type="checkbox" id="inbox_only_unread" /> Chỉ chưa đọc</label>
-            <button class="btn" id="btn_inbox_refresh">Tải hội thoại</button>
-            <label style="margin-left:8px"><input type="checkbox" id="inbox_auto_refresh" /> Tự động tải tin mới</label>
-            <select id="inbox_refresh_interval" title="Chu kỳ làm mới" style="min-width:120px">
-              <option value="5">5s</option>
-              <option value="10" selected>10s</option>
-              <option value="15">15s</option>
-              <option value="30">30s</option>
-            </select>
-                 <label style="margin-left:8px"><input type="checkbox" id="inbox_sound" checked/> Âm báo</label>
-          </div>
-          <div class="status" id="inbox_pages_status">
-      <div class="col">
-        <div class="card">
-          <h3>Chi tiết hội thoại</h3>
-          <div id="thread_header" class="conv-meta" style="margin-bottom:6px">(Chưa chọn hội thoại)</div><div id="typing_indicator" class="conv-meta" style="color:#1976d2; display:none">Đang nhập…</div><div id="read_indicator" class="conv-meta" style="display:none">Đã xem</div>
-          <div id="thread_messages" class="inbox-list" style="height:420px"></div>
-          <div class="toolbar" style="margin-top:6px; gap:6px">
-            <input id="reply_text" placeholder="Nhập tin nhắn..." />
-            <button class="btn primary" id="btn_send_reply">Gửi</button>
-            <button class="btn" id="btn_mark_seen">Đánh dấu đã xem</button>
-          </div>
-          <div class="toolbar" style="margin-top:6px">
-            <select id="quick_reply">
-              <option value="">— Mẫu trả lời nhanh —</option>
-              <option>Chào bạn, mình có thể hỗ trợ gì ạ?</option>
-              <option>Bạn gửi giúp mình số điện thoại/Zalo để tư vấn nhanh nhé.</option>
-              <option>Link chính thức: https://qq888vn.blogspot.com/</option>
-            </select>
-            <button class="btn" id="btn_use_quick">Chèn</button>
-          </div>
-          <div class="status" id="thread_status"></div>
-        </div>
-      </div>
+      <input type="text" id="post_media_url" placeholder="URL ảnh/video (tuỳ chọn)" style="flex:1">
+      <input type="file" id="post_media_file" accept="image/*,video/*">
+      <button class="btn primary" id="btn_post_submit">Đăng</button>
     </div>
-        </div>
-      </div>
-      <div class="col">
-        <div class="card">
-          <h3>Hội thoại</h3>
-          <div id="conversations" class="inbox-list"></div>
-          <div class="status" id="inbox_conv_status"></div>
-        </div>
-      </div>
-    </div>
+    <div class="status" id="post_status"></div>
   </div>
 
-  <div id="panel-settings" class="panel">
-    <div class="row">
-      <div class="col">
-        <div class="card">
-          <h3>Cài đặt cho từng Page</h3>
-          <select id="settings_page"></select>
-          <div class="grid" style="margin-top:8px">
-            <input id="settings_keyword" placeholder="Từ khoá (VD: MB66)"/>
-            <input id="settings_link" placeholder="Link mặc định (https://...)"/>
-            <input id="settings_zalo" placeholder="Zalo (số/username)"/>
-            <input id="settings_telegram" placeholder="Telegram (username @...)"/>
-          </div>
-          <div class="toolbar" style="margin-top:8px">
-            <button class="btn primary" id="btn_save_settings">Lưu cài đặt</button>
-          </div>
-          <div class="status" id="settings_status"></div>
-        </div>
-        <div class="card" style="margin-top:12px">
-          <h3>Danh sách cài đặt đã lưu</h3>
-          <div class="toolbar"><button class="btn" id="btn_settings_reload">Tải lại</button></div>
-          <div id="settings_saved_list" class="list"></div>
-        </div>
-      </div>
-    </div>
+  <div id="tab-settings" class="tab card" style="display:none">
+    <h3>Cài đặt</h3>
+    <div class="muted">Webhook URL: <code>/webhook/events</code></div>
+    <div class="status" id="settings_status"></div>
+    <div id="settings_box" class="pages-box"></div>
+    <div class="row"><button class="btn primary" id="btn_settings_save">Lưu cài đặt</button></div>
   </div>
-    </div></div></div>
-  </div>
+</div>
 
 <script>
-const $ = sel => document.querySelector(sel);
-const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+function $(s){return document.querySelector(s)}; function $all(s){return Array.from(document.querySelectorAll(s))}
+document.querySelectorAll('.tab-btn').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.tab').forEach(t=>t.style.display='none');document.querySelector('#tab-'+btn.getAttribute('data-tab')).style.display='block';});});
 
-function showTab(name){
-  ['posts','inbox','settings'].forEach(n=>{
-    const id = n==='page-info' ? 'page-info' : n;
-    $('#tab-'+id).classList.toggle('active', id===name);
-    $('#panel-'+id).classList.toggle('active', id===name);
-  });
-}
-$('#tab-posts').onclick = ()=>showTab('posts');
-$('#tab-inbox').onclick = ()=>{ showTab('inbox'); };
-$('#tab-settings').onclick = ()=>{ showTab('settings'); loadPagesToSelect('settings_page'); loadSettingsSavedList(); };
-
-
-const pagesBox = $('#pages');
-const pagesStatus = $('#pages_status');
-
-function selectedPageIds(){
-  return Array.from(document.querySelectorAll('.pg:checked')).map(i=>i.value);
-}
-
-
-
-// ==== Helpers: select all ====
-function toggleAll(selector, checked){
-  document.querySelectorAll(selector).forEach(el => { el.checked = checked; el.dispatchEvent(new Event('change')); });
-}
-document.addEventListener('change', (ev)=>{
-  if(ev.target && ev.target.id==='pages_select_all'){
-    toggleAll('.pg', ev.target.checked);
-    if(document.querySelector('#perpage_toggle')?.checked){ renderPerPageEditors(); }
-  }
-  if(ev.target && ev.target.id==='inbox_pages_select_all'){
-    toggleAll('.pg-inbox', ev.target.checked);
-  }
-});
-// ==== Inbox (multi-page, unread filter) ====
-async function loadInboxPages(){
-  const box = document.querySelector('#inbox_pages');
-  const st = document.querySelector('#inbox_pages_status');
-  if(!box) return;
-  box.innerHTML = '<div class="muted">Đang tải...</div>';
+async function loadPages(){
+  const box1=$('#pages_box'), box2=$('#post_pages_box'), st1=$('#inbox_pages_status'), st2=$('#post_pages_status');
   try{
-    const r = await fetch('/api/pages'); const d = await r.json();
-    const arr = (d && d.data) || [];
-    arr.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'vi', {sensitivity:'base'}));
-    box.innerHTML = arr.map(p => ('<div class="item"><label><span>'+(p.name||'')+'</span></label><input type="checkbox" class="pg-inbox" value="'+p.id+'"></div>')).join('');
-    st.textContent = 'Tải ' + arr.length + ' page.';
-  }catch(e){ st.textContent = 'Lỗi tải danh sách page'; }
+    const r=await fetch('/api/pages'); const d=await r.json();
+    const pages=(d.data||[]);
+    const html=pages.map(p=>'<label class="checkbox"><input type="checkbox" class="pg-inbox" value="'+p.id+'"> '+(p.name||('Page '+p.id))+'</label>').join('');
+    const html2=pages.map(p=>'<label class="checkbox"><input type="checkbox" class="pg-post" value="'+p.id+'"> '+(p.name||('Page '+p.id))+'</label>').join('');
+    box1.innerHTML=html; box2.innerHTML=html2; st1.textContent='Tải '+pages.length+' page.'; st2.textContent='Tải '+pages.length+' page.';
+    const sa1=$('#inbox_select_all'), sa2=$('#post_select_all');
+    if(sa1){ sa1.checked=false; sa1.onchange=()=>{const c=sa1.checked; $all('.pg-inbox').forEach(cb=>cb.checked=c);}}
+    if(sa2){ sa2.checked=false; sa2.onchange=()=>{const c=sa2.checked; $all('.pg-post').forEach(cb=>cb.checked=c);}}
+    function syncMaster(groupSel, masterSel){const all=$all(groupSel); const m=$(masterSel); if(!m)return; const update=()=>{m.checked=all.length>0 && all.every(cb=>cb.checked)}; all.forEach(cb=>cb.addEventListener('change',update)); update();}
+    syncMaster('.pg-inbox','#inbox_select_all'); syncMaster('.pg-post','#post_select_all');
+  }catch(e){ st1.textContent='Không tải được page'; st2.textContent='Không tải được page'; }
 }
 
-function selectedInboxPageIds(){
-  return Array.from(document.querySelectorAll('.pg-inbox:checked')).map(i=>i.value);
+function renderConversations(items){
+  const list=$('#conversations'); const st=$('#inbox_conv_status'); if(!list)return;
+  list.innerHTML=items.map((x,i)=>{
+    const when=x.updated_time?new Date(x.updated_time).toLocaleString('vi-VN'):'';
+    const unread=(x.unread_count&&x.unread_count>0);
+    const badge=unread?'<span class="badge unread">Chưa đọc '+(x.unread_count||'')+'</span>':'<span class="badge">Đã đọc</span>';
+    let senders='(Không rõ)';
+    if(Array.isArray(x.senders?.data)){ senders=x.senders.data.map(s=>s.name||s.id||'').filter(Boolean).join(', '); if(!senders) senders='(Không rõ)'; }
+    return '<div class="conv-item" data-idx="'+i+'"><div><div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div><div class="conv-meta">'+(x.snippet||'')+'</div></div><div class="right" style="min-width:160px">'+when+'<br>'+badge+'</div></div>';
+  }).join('') || '<div class="muted">Không có hội thoại.</div>';
+  st.textContent='Tải '+items.length+' hội thoại.';
+  const total=items.reduce((a,b)=>a+(b.unread_count||0),0); const ub=$('#unread_total'); if(ub){ ub.style.display=''; ub.textContent='Chưa đọc: '+total; }
+  window.__convData=items;
 }
 
 async function refreshConversations(){
-function appendBubble(box, {who, time, text, side, mid, status}){
-  const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight < 40);
-  const wrap = document.createElement('div');
-  wrap.style.display = 'flex';
-  wrap.style.margin = '6px 0';
-  wrap.style.justifyContent = (side==='right' ? 'flex-end' : 'flex-start');
-  const b = document.createElement('div');
-  b.className = 'bubble ' + (side==='right'?'right':'');
-  b.dataset.mid = mid || '';
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  meta.textContent = (who||'') + (time?(' · '+time):'');
-  const body = document.createElement('div');
-  body.textContent = text || '(media)';
-  const st = document.createElement('span');
-  st.className = 'status';
-  st.textContent = status || '';
-  meta.appendChild(st);
-  b.appendChild(meta); b.appendChild(body); wrap.appendChild(b);
-  box.appendChild(wrap);
-  if(nearBottom){ box.scrollTop = box.scrollHeight; }
-}
-
-function updateBubbleStatusByMid(mid, newStatus){
-  if(!mid) return;
-  const el = document.querySelector('.bubble[data-mid="'+mid+'"] .status');
-  if(el){ el.textContent = newStatus || ''; }
-}
-
-async function loadThread(conv){
-  const st = document.querySelector('#thread_status');
-  const box = document.querySelector('#thread_messages');
-  const head = document.querySelector('#thread_header');
-  if(!conv || !conv.id){ head.textContent='(Không có dữ liệu)'; box.innerHTML=''; return; }
-  head.textContent = (conv.senders || '') + ' · ' + (conv.page_name || '');
-  box.innerHTML = '<div class="muted">Đang tải tin nhắn...</div>';
+  const pids=$all('.pg-inbox:checked').map(i=>i.value); const onlyUnread=$('#inbox_only_unread')?.checked?1:0; const st=$('#inbox_conv_status');
+  if(!pids.length){ st.textContent='Hãy chọn ít nhất 1 Page'; renderConversations([]); return; }
+  st.textContent='Đang tải hội thoại...';
   try{
-    const r = await fetch('/api/inbox/messages?conversation_id='+encodeURIComponent(conv.id));
-    const d = await r.json();
-    if(d.error){ st.textContent = JSON.stringify(d); box.innerHTML=''; return; }
-    const msgs = (d.data||[]);
-    // Render bubbles
-    box.innerHTML = '';
-    msgs.forEach(m=>{
-      const who = (m.from && m.from.name) ? m.from.name : '';
-      const side = (m.is_page ? 'right' : 'left');
-      const time = m.created_time ? new Date(m.created_time).toLocaleString('vi-VN') : '';
-      appendBubble(box, {who, time, text: m.message||'(media)', side, mid: m.id||'', status: ''});
-    });
-    box.scrollTop = box.scrollHeight;
-    // Cache selection on elements for send actions
-    box.dataset.conversationId = conv.id || '';
-    box.dataset.pageId = conv.page_id || '';
-    box.dataset.psid = d.psid || '';
+    const url='/api/inbox/conversations?pages='+encodeURIComponent(pids.join(','))+'&only_unread='+onlyUnread+'&limit=50';
+    const r=await fetch(url); const d=await r.json();
+    if(d.error){ st.textContent=d.error; renderConversations([]); return; }
+    const items=(Array.isArray(d.data)?d.data:[]).map(c=>{c.page_name=c.page_name||('Page '+c.page_id);return c;});
+    renderConversations(items);
+  }catch(e){ st.textContent='Không tải được hội thoại'; renderConversations([]); }
+}
+$('#btn_inbox_refresh')?.addEventListener('click', refreshConversations);
+$('#conversations')?.addEventListener('click',(ev)=>{const it=ev.target.closest('.conv-item'); if(!it) return; loadThreadByIndex(+it.getAttribute('data-idx'));});
+
+async function loadThreadByIndex(i){
+  const conv=(window.__convData||[])[i]; if(!conv) return; window.__currentConv=conv;
+  const box=$('#thread_messages'); const head=$('#thread_header'); const st=$('#thread_status');
+  head.textContent=(function(){let s=''; if(Array.isArray(conv.senders?.data)){s=conv.senders.data.map(x=>x.name||x.id||'').filter(Boolean).join(', ')}; return (s||'(không rõ)')+' · '+(conv.page_name||'');})();
+  box.innerHTML='<div class="muted">Đang tải tin nhắn...</div>';
+  try{
+    const r=await fetch('/api/inbox/messages?conversation_id='+encodeURIComponent(conv.id)); const d=await r.json();
+    const msgs=(d.data||[]);
+    box.innerHTML=msgs.map(m=>{const who=(m.from&&m.from.name)?m.from.name:''; const time=m.created_time?new Date(m.created_time).toLocaleString('vi-VN'):''; const side=m.is_page?'right':'left'; return '<div style="display:flex;justify-content:'+(side==='right'?'flex-end':'flex-start')+';margin:6px 0"><div class="bubble '+(side==='right'?'right':'')+'"><div class="meta">'+(who||'')+(time?(' · '+time):'')+'</div><div>'+(m.message||'(media)')+'</div></div></div>';}).join('');
+    box.scrollTop=box.scrollHeight; st.textContent='Tải '+msgs.length+' tin nhắn';
   }catch(e){ st.textContent='Lỗi tải tin nhắn'; box.innerHTML=''; }
 }
 
-document.querySelector('#conversations').addEventListener('click', (ev)=>{
-  const item = ev.target.closest('.conv-item');
-  if(!item) return;
-  const idx = Array.from(document.querySelectorAll('#conversations .conv-item')).indexOf(item);
-  const listData = window.__convData || [];
-  if(listData[idx]) loadThread(listData[idx]);
-});
-
-document.querySelector('#btn_send_reply').addEventListener('click', async ()=>{
-  const st = document.querySelector('#thread_status');
-  const box = document.querySelector('#thread_messages');
-  const text = (document.querySelector('#reply_text').value||'').trim();
-  if(!text){ st.textContent='Nhập nội dung trước'; return; }
-  const page_id = box.dataset.pageId || '';
-  const psid = box.dataset.psid || '';
-  if(!page_id || !psid){ st.textContent='Thiếu page_id hoặc psid'; return; }
+$('#reply_text')?.addEventListener('keydown',(ev)=>{ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); $('#btn_reply')?.click(); }});
+$('#btn_reply')?.addEventListener('click', async ()=>{
+  const input=$('#reply_text'); const txt=(input.value||'').trim(); const conv=window.__currentConv; const st=$('#thread_status');
+  if(!conv){ st.textContent='Chưa chọn hội thoại'; return; } if(!txt){ st.textContent='Nhập nội dung'; return; }
   st.textContent='Đang gửi...';
-  // Optimistic UI
-  const now = new Date().toLocaleString('vi-VN');
-  appendBubble(box, {who: 'Bạn', time: now, text, side: 'right', mid: '', status: '⌛'});
   try{
-    const r = await fetch('/api/inbox/send', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({page_id, psid, text})});
-    const d = await r.json();
-    if(d.error){ st.textContent=JSON.stringify(d); return; }
-    st.textContent='Đã gửi';
-    document.querySelector('#reply_text').value='';
-    const mid = d.__ui_message_id || '';
-    // Update last outgoing bubble's mid and set delivered if we get delivery later
-    const last = box.querySelector('.bubble.right:last-child');
-    if(last){
-      last.parentElement.parentElement.querySelector('.bubble.right:last-child').dataset.mid = mid;
-      const statusEl = last.querySelector('.status');
-      if(statusEl) statusEl.textContent = '✓ chờ giao';
-    }
-  }catch(e){ st.textContent='Gửi thất bại'; }
+    const r=await fetch('/api/inbox/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:conv.id,page_id:conv.page_id,user_id:conv.user_id||'',text:txt})});
+    const d=await r.json();
+    if(d.error){ const fbLink=conv.link?(' <a target="_blank" href="'+conv.link+'">Mở trên Facebook</a>'):''; st.innerHTML=(d.error+fbLink); return; }
+    input.value=''; st.textContent='Đã gửi.'; loadThreadByIndex((window.__convData||[]).findIndex(x=>x.id===conv.id));
+  }catch(e){ st.textContent='Lỗi gửi'; }
 });
 
-document.querySelector('#btn_mark_seen').addEventListener('click', async ()=>{
-  const st = document.querySelector('#thread_status');
-  const box = document.querySelector('#thread_messages');
-  const page_id = box.dataset.pageId || '';
-  const psid = box.dataset.psid || '';
-  if(!page_id || !psid){ st.textContent='Thiếu page_id hoặc psid'; return; }
-  try{
-    const r = await fetch('/api/inbox/mark_seen', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({page_id, psid})});
-    const d = await r.json();
-    if(d.error){ st.textContent=JSON.stringify(d); return; }
-    st.textContent='Đã đánh dấu đã xem';
-  }catch(e){ st.textContent='Thao tác thất bại'; }
+// Posting - AI
+$('#btn_ai_generate')?.addEventListener('click', async ()=>{
+  const prompt=($('#ai_prompt')?.value||'').trim(); const st=$('#post_status'); const pids=$all('.pg-post:checked').map(i=>i.value);
+  if(!prompt){ st.textContent='Nhập prompt'; return; }
+  const page_id=pids[0]||null; st.textContent='Đang tạo bằng AI...';
+  try{ const r=await fetch('/api/ai/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page_id, prompt})}); const d=await r.json(); if(d.error){ st.textContent=d.error; return; } $('#post_text').value=(d.text||'').trim(); st.textContent='Đã tạo xong.'; }catch(e){ st.textContent='Lỗi AI'; }
 });
 
-document.querySelector('#btn_use_quick').addEventListener('click', ()=>{
-  const q = document.querySelector('#quick_reply').value || '';
-  if(q){ 
-    const t = document.querySelector('#reply_text');
-    t.value = (t.value ? (t.value + ' ') : '') + q;
-    t.focus();
-  }
+$('#btn_ai_generate_from_settings')?.addEventListener('click', async ()=>{
+  const pids=$all('.pg-post:checked').map(i=>i.value); const st=$('#post_status'); if(!pids.length){ st.textContent='Chọn ít nhất 1 Page'; return; }
+  st.textContent='Đang tạo từ cài đặt Page...';
+  try{ const r=await fetch('/api/ai/generate_from_settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page_id:pids[0]})}); const d=await r.json(); if(d.error){ st.textContent=d.error; return; } $('#post_text').value=(d.text||'').trim(); st.textContent='Đã tạo xong.'; }catch(e){ st.textContent='Lỗi AI'; }
 });
 
-// Overwrite refreshConversations to capture data list in memory
-const _origRefreshConversations = refreshConversations;
-refreshConversations = async function(){
-  await _origRefreshConversations();
-  try{
-    const urlParams = '/api/inbox/conversations?pages='+encodeURIComponent(selectedInboxPageIds().join(','))+'&only_unread='+ (document.querySelector('#inbox_only_unread')?.checked ? 1 : 0) +'&limit=50';
-    const r = await fetch(urlParams); const d = await r.json();
-    window.__convData = d.data || [];
-    // Re-render list to add a data-index attribute
-    const list = document.querySelector('#conversations');
-    list.innerHTML = (window.__convData || []).map((x, i) => {
-      const when = x.updated_time ? new Date(x.updated_time).toLocaleString('vi-VN') : '';
-      const badge = x.unread ? '<span class="badge unread">Chưa đọc '+(x.unread_count||'')+'</span>' : '<span class="badge">Đã đọc</span>';
-      return (
-        '<div class="conv-item" data-idx="'+i+'">'
-        + '<div><div><strong>'+(x.senders || '(không rõ người gửi)')+'</strong> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>'
-        + '<div class="conv-meta">'+(x.snippet || '')+'</div></div>'
-        + '<div style="text-align:right; min-width:160px"><div class="conv-meta">'+when+'</div><div>'+badge+'</div></div>'
-        + '</div>'
-      );
-    }).join('') || '<div class="muted">Không có hội thoại.</div>';
-    document.querySelector('#inbox_conv_status').textContent = 'Tải ' + ((window.__convData||[]).length) + ' hội thoại.';
-  }catch(e){}
-}
-
-  const st = document.querySelector('#inbox_conv_status');
-  const list = document.querySelector('#conversations');
-  if(!list){ return; }
-  const onlyUnread = document.querySelector('#inbox_only_unread')?.checked ? 1 : 0;
-  const pids = selectedInboxPageIds();
-  if(!pids.length){ st.textContent = 'Hãy chọn ít nhất 1 page'; list.innerHTML=''; return; }
-  st.textContent = 'Đang tải hội thoại...';
-  list.innerHTML = '';
-  try{
-    const url = '/api/inbox/conversations?pages='+encodeURIComponent(pids.join(','))+'&only_unread='+onlyUnread+'&limit=50';
-    const r = await fetch(url); const d = await r.json();
-    if(d.error){ st.textContent = JSON.stringify(d); return; }
-    const rows = (d.data||[]).map(x=>{
-      const when = x.updated_time ? new Date(x.updated_time).toLocaleString('vi-VN') : '';
-      const badge = x.unread ? '<span class="badge unread">Chưa đọc '+(x.unread_count||'')+'</span>' : '<span class="badge">Đã đọc</span>';
-      return (
-        '<div class="conv-item">'
-        + '<div><div><strong>'+(x.senders || '(không rõ người gửi)')+'</strong> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>'
-        + '<div class="conv-meta">'+(x.snippet || '')+'</div></div>'
-        + '<div style="text-align:right; min-width:160px"><div class="conv-meta">'+when+'</div><div>'+badge+'</div></div>'
-        + '</div>'
-      );
-    });
-    list.innerHTML = rows.join('') || '<div class="muted">Không có hội thoại.</div>';
-    st.textContent = 'Tải ' + (d.data||[]).length + ' hội thoại.';
-  }catch(e){ st.textContent = 'Lỗi tải hội thoại'; }
-}
-
-const _inbox_setup_once = (()=>{
-  let did = false;
-  return ()=>{
-    if(did) return; did = true;
-    const btn = document.querySelector('#btn_inbox_refresh');
-    if(btn) btn.onclick = refreshConversations;
-    const chk = document.querySelector('#inbox_only_unread');
-    if(chk) chk.onchange = refreshConversations;
-    loadInboxPages();
-  };
-})();
-
-// Khi bấm tab Inbox -> setup & show
-document.querySelector('#tab-inbox').addEventListener('click', ()=>{
-  showTab('inbox');
-  _inbox_setup_once();
-});
-async function loadPages(){
-  pagesBox.innerHTML = '<div class="muted">Đang tải...</div>';
-  try{
-    const r = await fetch('/api/pages');
-    const d = await r.json();
-    if(d.error){ pagesStatus.textContent = JSON.stringify(d); return; }
-    const arr = d.data || [];
-    arr.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'vi', {sensitivity:'base'}));
-    pagesBox.innerHTML = arr.map(p => ('<div class="item"><label><span>'+(p.name||'')+'</span></label><input type="checkbox" class="pg" value="'+p.id+'"></div>')).join('');
-    pagesStatus.textContent = 'Tải ' + arr.length + ' page.';
-  }catch(e){ pagesStatus.textContent = 'Lỗi tải danh sách page'; }
-}
-loadPages();
-
-async function loadPagesToSelect(selectId){
-  const sel = $('#'+selectId);
-  try{
-    const r = await fetch('/api/pages'); const d = await r.json();
-    const arr = (d && d.data) || [];
-    sel.innerHTML = '<option value="">--Chọn page--</option>' + arr.map(p=>'<option value="'+p.id+'">'+(p.name||p.id)+'</option>').join('');
-  }catch(e){ sel.innerHTML = '<option value="">(Không tải được)</option>'; }
-}
-
-
-
-async function loadSettingsSavedList(){
-  const box = document.querySelector('#settings_saved_list');
-  if(!box) return;
-  box.innerHTML = '<div class="muted">Đang tải...</div>';
-
-  // fetch pages for name mapping
-  let pages = [];
-  try{
-    const rp = await fetch('/api/pages'); const dp = await rp.json();
-    pages = (dp && dp.data) || [];
-  }catch(_){}
-  const nameById = Object.fromEntries(pages.map(p => [String(p.id), p.name||p.id]));
-
-  try{
-    const r = await fetch('/api/settings/list'); const d = await r.json();
-    const entries = Object.entries(d);
-    if(!entries.length){ box.innerHTML = '<div class="muted">Chưa có cài đặt nào.</div>'; return; }
-    entries.sort((a,b)=> (nameById[a[0]]||a[0]).localeCompare(nameById[b[0]]||b[0], 'vi', {sensitivity:'base'}));
-    box.innerHTML = entries.map(([pid, cfg])=>{
-      const name = nameById[pid] || pid;
-      const kw = (cfg.keyword||''); const link=(cfg.link||''); const zalo=(cfg.zalo||''); const telegram=(cfg.telegram||'');
-      return `<div class="item saved-row">
-        <div class="grid">
-          <div><strong>${name}</strong><div class="meta">${pid}</div></div>
-          <input id="sv_kw_${pid}" value="${kw}"/>
-          <input id="sv_link_${pid}" value="${link}"/>
-          <input id="sv_zalo_${pid}" value="${zalo}"/>
-          <input id="sv_tg_${pid}" value="${telegram}"/>
-        </div>
-        <div class="toolbar" style="margin-top:6px">
-          <button class="btn" onclick="saveSettingsRow('${pid}')">Lưu</button>
-        </div>
-      </div>`;
-    }).join('');
-  }catch(e){
-    box.innerHTML = '<div class="muted">Lỗi tải danh sách</div>';
-  }
-}
-
-async function saveSettingsRow(pid){
-  const st = document.querySelector('#settings_status');
-  const kw = (document.querySelector('#sv_kw_'+pid)?.value||'').trim();
-  const link = (document.querySelector('#sv_link_'+pid)?.value||'').trim();
-  const zalo = (document.querySelector('#sv_zalo_'+pid)?.value||'').trim();
-  const telegram = (document.querySelector('#sv_tg_'+pid)?.value||'').trim();
-  try{
-    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword: kw, link, zalo, telegram})});
-    const d = await r.json();
-    if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
-    st.textContent='Đã lưu cho '+pid;
-  }catch(e){ st.textContent='Lỗi lưu cài đặt cho '+pid; }
-}
-
-document.addEventListener('click', (ev)=>{
-  if(ev.target && ev.target.id==='btn_settings_reload'){ loadSettingsSavedList(); }
-});
-// Load settings on page selection in Settings tab
-document.querySelector('#settings_page').addEventListener('change', async ()=>{
-  const pid = document.querySelector('#settings_page').value;
-  if(!pid){ return; }
-  try{
-    const cfg = await (await fetch('/api/settings/'+pid)).json();
-    document.querySelector('#settings_keyword').value = cfg.keyword || '';
-    document.querySelector('#settings_link').value = cfg.link || '';
-    if(document.querySelector('#settings_zalo')) document.querySelector('#settings_zalo').value = cfg.zalo || '';
-    if(document.querySelector('#settings_telegram')) document.querySelector('#settings_telegram').value = cfg.telegram || '';
-  }catch(e){ /* ignore */ }
-});
-
-// ==== Per-page content override ====
-function renderPerPageEditors(){
-  const box = document.querySelector('#perpage_container');
-  const use = document.querySelector('#perpage_toggle')?.checked;
-  if(!box) return;
-  if(!use){ box.style.display='none'; box.innerHTML=''; return; }
-  const selected = selectedPageIds();
-  if(!selected.length){ box.style.display='none'; box.innerHTML='<div class="muted">Hãy chọn Page ở khung trái.</div>'; return; }
-  box.style.display='block';
-  const nameOf = id => {
-    const el = document.querySelector('.pg[value="'+id+'"]');
-    return el ? el.closest('.item').querySelector('span').textContent : id;
-  };
-  box.innerHTML = selected.map(pid => (
-    '<div class="item"><div style="font-weight:600;margin-bottom:4px">'+nameOf(pid)+'</div>' +
-    '<textarea data-pid="'+pid+'" class="perpage_text" style="min-height:90px" placeholder="Nội dung riêng cho page này (tuỳ chọn)"></textarea></div>'
-  )).join('');
-}
-document.querySelector('#perpage_toggle').addEventListener('change', renderPerPageEditors);
-document.addEventListener('change', (ev)=>{
-  if(ev.target && ev.target.classList.contains('pg')){
-    if(document.querySelector('#perpage_toggle')?.checked){ renderPerPageEditors(); }
-  }
-});
-
-// ==== Bulk post with progress ====
-async function bulkPost(){
-  const pages = selectedPageIds();
-  const st = document.querySelector('#post_status');
-  const progWrap = document.querySelector('#post_progress_wrap');
-  const progText = document.querySelector('#post_progress_text');
-  const progBar = document.querySelector('#post_progress_bar');
-  const resultsBox = document.querySelector('#post_results');
-  const exportBtn = document.querySelector('#btn_export_results');
-  exportBtn.disabled = true;
-  resultsBox.innerHTML = '';
-  if(!pages.length){ st.textContent='Hãy tick ít nhất 1 page bên trái'; return; }
-
-  const mainText = (document.querySelector('#post_text')?.value||'').trim();
-  if(!mainText && !document.querySelector('#perpage_toggle')?.checked){
-    st.textContent='Nội dung trống'; return;
-  }
-
-  st.textContent='';
-  progWrap.style.display='block';
-  let done = 0, total = pages.length;
-  const rows = [];
-
-  for(const pid of pages){
-    let text = mainText;
-    const ed = document.querySelector('.perpage_text[data-pid="'+pid+'"]');
-    if(ed && ed.value.trim()) text = ed.value.trim();
-
-    progText.textContent = `Đang đăng ${done+1}/${total} ...`;
-    progBar.style.width = Math.round((done/total)*100)+'%';
+async function batchPost(){
+  const pids=$all('.pg-post:checked').map(i=>i.value); const text=($('#post_text')?.value||'').trim(); const url=($('#post_media_url')?.value||'').trim(); const file=$('#post_media_file')?.files?.[0]||null; const type=(document.querySelector('input[name="post_type"]:checked')?.value)||'feed'; const st=$('#post_status');
+  if(!pids.length){ st.textContent='Chọn ít nhất 1 Page'; return; }
+  if(!text && !url && !file){ st.textContent='Nhập nội dung hoặc chọn media'; return; }
+  st.textContent='Đang đăng...';
+  let ok=0, fail=0;
+  for(const pid of pids){
     try{
-      const r = await fetch('/api/pages/'+pid+'/post', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: text})});
-      const d = await r.json();
-      let status = 'OK', link = '';
-      if(d.error){ status = 'ERROR: '+JSON.stringify(d); }
-      else{
-        const postId = d.id || d.post_id || '';
-        link = postId ? 'https://facebook.com/'+postId : '';
-      }
-      rows.push({page_id: pid, page_name: '', status, link});
-      const line = `<div class="item"><div><strong>${pid}</strong></div><div class="conv-meta">${status}${link?(' · <a href="${link}" target="_blank">Xem bài</a>'):''}</div></div>`;
-      resultsBox.insertAdjacentHTML('beforeend', line);
-    }catch(e){
-      rows.push({page_id: pid, page_name: '', status: 'ERROR', link: ''});
-      resultsBox.insertAdjacentHTML('beforeend', `<div class="item"><div><strong>${pid}</strong></div><div class="conv-meta">ERROR</div></div>`);
-    }
-    done += 1;
-    progBar.style.width = Math.round((done/total)*100)+'%';
-  }
-  progText.textContent = `Hoàn tất: ${done}/${total}`;
-  exportBtn.disabled = false;
-  exportBtn.onclick = async ()=>{
-    try{
-      const r = await fetch('/api/export/posts_report', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({rows})});
-      if(r.status === 200){
-        const blob = await r.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href=url; a.download='posts_report.xlsx'; a.click();
-        URL.revokeObjectURL(url);
-      }
-    }catch(_){}
-  };
-}
-/* replaced by bulkPost() */
-// AI writer (manual)
-$('#btn_ai').onclick = async () => {
-  const prompt = ($('#ai_prompt').value||'').trim();
-  const tone = $('#ai_tone').value;
-  const length = $('#ai_length').value;
-  const keyword = ($('#ai_keyword').value||'MB66').trim();
-  const link = ($('#ai_link').value||'').trim();
-  const st = $('#ai_status');
-  if(!keyword){ st.textContent='Nhập từ khoá chính'; return; }
-  st.textContent = 'Đang tạo nội dung...';
-  try{
-    const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt, tone, length, keyword, link})});
-    const d = await r.json();
-    if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
-    $('#post_text').value = d.text || '';
-    st.textContent = 'Đã chèn nội dung vào khung soạn.';
-  }catch(e){ st.textContent = 'Lỗi gọi AI'; }
-};
-
-// AI writer using first selected page settings
-$('#btn_ai_use_settings').onclick = async () => {
-  const pages = selectedPageIds();
-  const st = $('#ai_status');
-  if(!pages.length){ st.textContent='Hãy tick ít nhất 1 page bên trái'; return; }
-  const pid = pages[0];
-  try{
-    const cfg = await (await fetch('/api/settings/'+pid)).json();
-    const keyword = cfg.keyword || 'MB66';
-    const link = cfg.link || '';
-    $('#ai_keyword').value = keyword;
-    $('#ai_link').value = link;
-    $('#ai_status').textContent='Đã lấy cài đặt từ page '+pid+'. Đang tạo nội dung...';
-    const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tone: $('#ai_tone').value, length: $('#ai_length').value, keyword, link, prompt: 'Sinh nội dung theo cài đặt page.'})});
-    const d = await r.json();
-    if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
-    $('#post_text').value = d.text || '';
-    st.textContent='Đã chèn nội dung theo cài đặt.';
-  }catch(e){ st.textContent='Không lấy được cài đặt.'; }
-};
-
-// Publish
-$('#btn_publish').onclick = async () => {
-  const pages = selectedPageIds();
-  const text = ($('#post_text').value||'').trim();
-  const type = $('#post_type').value;
-  const photo = $('#photo_input').files[0] || null;
-  const video = $('#video_input').files[0] || null;
-  const caption = ($('#media_caption').value||'');
-  const st = $('#post_status');
-
-  if(!pages.length){ st.textContent='Chọn ít nhất một page'; return; }
-  if(type === 'feed' && !text && !photo && !video){ st.textContent='Cần nội dung hoặc tệp'; return; }
-  if(type === 'reels' && !video){ st.textContent='Cần chọn video cho Reels'; return; }
-
-  st.textContent='Đang đăng (có giãn cách an toàn)...';
-  try{
-    const results = [];
-    for(const pid of pages){
-      let d;
-      if(type === 'feed'){
-        if(video){
-          const fd = new FormData();
-          fd.append('video', video);
-          fd.append('description', caption || text || '');
-          const r = await fetch('/api/pages/'+pid+'/video', {method:'POST', body: fd});
-          d = await r.json();
-        }else if(photo){
-          const fd = new FormData();
-          fd.append('photo', photo);
-          fd.append('caption', caption || text || '');
-          const r = await fetch('/api/pages/'+pid+'/photo', {method:'POST', body: fd});
-          d = await r.json();
+      if(type==='video'){
+        if(file){
+          const fd=new FormData(); fd.append('video', file); fd.append('description', text||''); const r=await fetch('/api/pages/'+pid+'/video',{method:'POST',body:fd}); const d=await r.json(); if(d.error){ fail++; } else { ok++; }
+        }else if(url){
+          const fd=new FormData(); fd.append('file_url', url); fd.append('description', text||''); const r=await fetch('/api/pages/'+pid+'/video',{method:'POST',body:fd}); const d=await r.json(); if(d.error){ fail++; } else { ok++; }
         }else{
-          const r = await fetch('/api/pages/'+pid+'/post', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: text})});
-          d = await r.json();
+          fail++;
         }
       }else{
-        const fd = new FormData();
-        fd.append('video', video);
-        fd.append('description', caption || text || '');
-        const r = await fetch('/api/pages/'+pid+'/reel', {method:'POST', body: fd});
-        d = await r.json();
-      }
-      if(d.error){ results.push('❌ ' + pid + ': ' + JSON.stringify(d)); }
-      else{
-        const link = d.permalink_url ? ' · <a target="_blank" href="'+d.permalink_url+'">Mở bài</a>' : '';
-        results.push('✅ ' + pid + link);
-      }
-      await sleep(1200 + Math.floor(Math.random()*1200));
-    }
-    st.innerHTML = results.join('<br/>');
-  }catch(e){ st.textContent='Lỗi đăng'; }
-};
-
-// Settings
-$('#btn_save_settings').onclick = async () => {
-  const pid = $('#settings_page').value;
-  const keyword = ($('#settings_keyword').value||'').trim();
-  let link = ($('#settings_link').value||'').trim();
-  const st = $('#settings_status');
-  if(!pid){ st.textContent='Chưa chọn page'; return; }
-  try{
-    const r = await fetch('/api/settings/'+pid, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword, link})});
-    const d = await r.json();
-    if(d.error){ st.textContent='Lỗi: '+JSON.stringify(d); return; }
-    st.textContent='Đã lưu cài đặt.';
-  }catch(e){ st.textContent='Lỗi lưu cài đặt'; }
-};
-
-// Khi đổi Page ở tab Cài đặt -> tự load cài đặt đã lưu
-document.addEventListener('change', async (evt) => {
-  if(evt.target && evt.target.id === 'settings_page'){
-    const pid = $('#settings_page').value;
-    const st = $('#settings_status');
-    if(!pid){ $('#settings_keyword').value=''; $('#settings_link').value=''; return; }
-    try {
-      const r = await fetch('/api/settings/'+pid);
-      const d = await r.json();
-      $('#settings_keyword').value = d.keyword || '';
-      $('#settings_link').value = d.link || '';
-      st.textContent = d.keyword || d.link ? 'Đã nạp cài đặt đã lưu.' : 'Chưa có cài đặt — hãy nhập và lưu.';
-    } catch(e){ st.textContent = 'Không tải được cài đặt.'; }
-  }
-});
-
-// ===== Auto refresh (polling) =====
-window.__autoRefreshTimer = null;
-window.__activeConvIdx = -1; // track current selected in list
-
-// Hook click to store index
-document.addEventListener('click', (ev)=>{
-  const it = ev.target.closest('#conversations .conv-item');
-  if(it){
-    const i = parseInt(it.getAttribute('data-idx') || '-1', 10);
-    if(!isNaN(i) && i >= 0){ window.__activeConvIdx = i; }
-  }
-});
-
-function startAutoRefresh(){
-  stopAutoRefresh();
-  const sel = document.querySelector('#inbox_refresh_interval');
-  let sec = parseInt(sel ? (sel.value || '10') : '10', 10);
-  if(isNaN(sec) || sec < 3) sec = 10;
-  window.__autoRefreshTimer = setInterval(async ()=>{
-    try{
-      await refreshConversations();
-      if(window.__activeConvIdx >= 0){
-        const conv = (window.__convData || [])[window.__activeConvIdx];
-        if(conv){ 
-          // Keep scroll at bottom if it was near bottom
-          const box = document.querySelector('#thread_messages');
-          const nearBottom = box ? (box.scrollHeight - box.scrollTop - box.clientHeight < 40) : true;
-          await loadThread(conv);
-          if(box && nearBottom){ box.scrollTop = box.scrollHeight; }
-        }
-      }
-    }catch(_){}
-  }, sec*1000);
-}
-
-function stopAutoRefresh(){
-  if(window.__autoRefreshTimer){ clearInterval(window.__autoRefreshTimer); window.__autoRefreshTimer = null; }
-}
-
-// Bind toggle + interval change
-document.addEventListener('change', (ev)=>{
-  if(ev.target && ev.target.id === 'inbox_auto_refresh'){
-    if(ev.target.checked){ startAutoRefresh(); } else { stopAutoRefresh(); }
-  }
-  if(ev.target && ev.target.id === 'inbox_refresh_interval'){
-    if(document.querySelector('#inbox_auto_refresh')?.checked){ startAutoRefresh(); }
-  }
-});
-
-// Start auto-refresh if users check it later; default is off.
-
-
-// ===== Realtime via SSE =====
-let __evtSrc = null;
-function setupSSE(){
-  try{
-    if(__evtSrc){ return; }
-    __evtSrc = new EventSource("/stream/messages");
-    __evtSrc.addEventListener("hello", ()=>{/* ready */});
-    __evtSrc.addEventListener("ping", ()=>{/* heartbeat */});
-    __evtSrc.addEventListener("message", async (e)=>{
-      try{
-        const data = JSON.parse(e.data || "{}");
-        if(data && data.type === "message"){ playNotifySound();
-      // existing message handler
-
-    if(data && data.type === "typing"){
-      const box = document.querySelector('#thread_messages');
-      const psid = box?.dataset?.psid || '';
-      if(psid && data.psid && psid === String(data.psid)){
-        const el = document.querySelector('#typing_indicator');
-        if(el){
-          if(String(data.status) === 'on'){ el.style.display = 'block'; }
-          else{ el.style.display = 'none'; }
-        }
-      }
-    }
-    if(data && data.type === "read"){
-      // Mark read indicator if the open thread matches PSID
-      const box = document.querySelector('#thread_messages');
-      const psid = box?.dataset?.psid || '';
-      if(psid && data.psid && psid === String(data.psid)){
-        const el = document.querySelector('#read_indicator');
-        if(el){
-          const when = data.timestamp ? new Date(data.timestamp).toLocaleString('vi-VN') : '';
-          el.textContent = when ? ('Đã xem · ' + when) : 'Đã xem';
-          el.style.display = 'block';
-          // Hide "typing" if showing
-          const ty = document.querySelector('#typing_indicator'); if(ty) ty.style.display='none';
-        }
-      }
-    }
-
-          // 1) Update conversations list quickly
-          try{ await refreshConversations(); }catch(_){}
-
-          // 2) If active thread matches PSID, append bubble + keep scroll
-          const box = document.querySelector('#thread_messages');
-          const psid = box?.dataset?.psid || '';
-          if(psid && data.psid && psid === String(data.psid)){
-            const when = new Date(data.timestamp || Date.now()).toLocaleString('vi-VN');
-            const html = (
-              '<div style="display:flex; margin:6px 0; justify-content:flex-start">'+
-              '<div style="max-width:72%; padding:8px 10px; border:1px solid #eaeaea; border-radius:12px; background:#fff">'+
-              '<div style="font-size:12px; color:#666">Khách · '+when+'</div>'+
-              '<div>'+ (data.text||'') +'</div>'+
-              '</div></div>'
-            );
-            const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight < 40);
-            box.insertAdjacentHTML('beforeend', html);
-            if(nearBottom){ box.scrollTop = box.scrollHeight; }
-          }
-        }
-      }catch(_){}
-    });
-  }catch(_){}
-}
-
-// Initialize SSE when entering Inbox tab
-document.querySelector('#tab-inbox').addEventListener('click', ()=>{
-  setupSSE();
-});
-
-
-// ===== Sound notifications =====
-let __audioCtx = null;
-function ensureAudioCtx(){
-  if(!__audioCtx){
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if(AC){ __audioCtx = new AC(); }
-  }
-  if(__audioCtx && __audioCtx.state === 'suspended'){
-    __audioCtx.resume().catch(()=>{});
-  }
-  return __audioCtx;
-}
-function playNotifySound(){
-  const chk = document.querySelector('#inbox_sound');
-  if(!chk || !chk.checked) return;
-  const ctx = ensureAudioCtx();
-  if(!ctx) return;
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.type = 'sine';
-  o.frequency.value = 880;
-  o.connect(g); g.connect(ctx.destination);
-  const t = ctx.currentTime;
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
-  o.start(t);
-  o.stop(t + 0.3);
-}
-// Persist checkbox state
-document.addEventListener('DOMContentLoaded', ()=>{
-  const chk = document.querySelector('#inbox_sound');
-  if(chk){
-    const saved = localStorage.getItem('inbox_sound') || '1';
-    chk.checked = saved === '1';
-    chk.addEventListener('change', ()=>{
-      localStorage.setItem('inbox_sound', chk.checked ? '1' : '0');
-    });
-  }
-});
-// Resume audio on first interaction to satisfy browser policies
-['click','keydown','touchstart'].forEach(evt=>{
-  window.addEventListener(evt, ()=>{ ensureAudioCtx(); }, {once:true, passive:true});
-});
-
-
-// --- Added: row-wide click toggles the checkbox (except direct control clicks) ---
-document.addEventListener('click', function(e){
-  const item = e.target.closest('#pages .item, #inbox_pages .item');
-  if(!item) return;
-  if(e.target.matches('input, button, a, textarea, select, label')) return;
-  const cb = item.querySelector('input[type="checkbox"]');
-  if(!cb) return;
-  cb.checked = !cb.checked;
-  cb.dispatchEvent(new Event('change', { bubbles: true }));
-});
-
-
-// --- Added: manual refresh for conversations button
-(function(){
-  const btn = document.querySelector('#btn_inbox_refresh');
-  if(btn){
-    btn.addEventListener('click', async ()=>{
-      const st = document.querySelector('#inbox_conv_status');
-      try{
-        st && (st.textContent = 'Đang tải hội thoại...');
-        await refreshConversations();
-      }catch(_){
-        st && (st.textContent = 'Không tải được hội thoại.');
-      }
-    });
-  }
-})();
-
-// --- Added: Auto-write & post (image + text)
-(function(){
-  const btn = document.querySelector('#btn_auto_post');
-  if(!btn) return;
-  btn.onclick = async () => {
-    const pages = selectedPageIds();
-    const st = document.querySelector('#post_status');
-    const progWrap = document.querySelector('#post_progress_wrap');
-    const progText = document.querySelector('#post_progress_text');
-    const progBar = document.querySelector('#post_progress_bar');
-    const resultsBox = document.querySelector('#post_results');
-    const exportBtn = document.querySelector('#btn_export_results');
-    const photo = document.querySelector('#photo_input')?.files?.[0] || null;
-    const video = document.querySelector('#video_input')?.files?.[0] || null;
-
-    exportBtn && (exportBtn.disabled = true);
-    resultsBox && (resultsBox.innerHTML = '');
-
-    if(!pages.length){ st.textContent='Hãy tick ít nhất 1 page bên trái'; return; }
-    if(!photo && !video){ st.textContent='Hãy chọn ảnh hoặc video trước'; return; }
-
-    // If no text/caption, generate via AI using first page's settings
-    let text = (document.querySelector('#post_text')?.value || '').trim();
-    let caption = (document.querySelector('#media_caption')?.value || '').trim();
-    if(!text){
-      try{
-        const pid0 = pages[0];
-        const cfg = await (await fetch('/api/settings/'+pid0)).json();
-        const keyword = (cfg.keyword || 'MB66');
-        const link = (cfg.link || '');
-        const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({keyword, link, prompt:'Sinh nội dung cho bài có ảnh.'})});
-        const d = await r.json();
-        if(!d.error && d.text){
-          text = (d.text || '').trim();
-          const pt = document.querySelector('#post_text'); if(pt) pt.value = text;
-        }
-      }catch(_){}
-    }
-    if(!caption){ caption = text; const mc = document.querySelector('#media_caption'); if(mc) mc.value = caption; }
-
-    st.textContent = 'Đang tự viết & đăng (có giãn cách an toàn)...';
-    if(progWrap) progWrap.style.display = 'block';
-    if(progBar) progBar.style.width = '0%';
-    const rows = [];
-    let done = 0, total = pages.length;
-
-    for(const pid of pages){
-      if(progText) progText.textContent = `Đang đăng ${done+1}/${total} ...`;
-      if(progBar) progBar.style.width = Math.round((done/total)*100)+'%';
-      try{
-        let d;
-        if(video){
-          const fd = new FormData();
-          fd.append('video', video);
-          fd.append('description', caption || text || '');
-          const r = await fetch('/api/pages/'+pid+'/video', {method:'POST', body: fd});
-          d = await r.json();
+        if(file){
+          const fd=new FormData(); fd.append('photo', file); fd.append('caption', text||''); const r=await fetch('/api/pages/'+pid+'/photo',{method:'POST',body:fd}); const d=await r.json(); if(d.error){ fail++; } else { ok++; }
+        }else if(url){
+          const r=await fetch('/api/pages/'+pid+'/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message: (text?(text+'\n'+url):url)})}); const d=await r.json(); if(d.error){ fail++; } else { ok++; }
         }else{
-          const fd = new FormData();
-          fd.append('photo', photo);
-          fd.append('caption', caption || text || '');
-          const r = await fetch('/api/pages/'+pid+'/photo', {method:'POST', body: fd});
-          d = await r.json();
-        }
-        let status = 'OK', link = '';
-        if(d.error){ status = 'ERROR: '+JSON.stringify(d); }
-        else{
-          const postId = d.id || d.post_id || '';
-          link = postId ? 'https://facebook.com/'+postId : (d.permalink_url || '');
-        }
-        rows.push({page_id: pid, page_name: '', status, link});
-        if(resultsBox){
-          const line = `<div class="item"><div><strong>${pid}</strong></div><div class="conv-meta">${status}${link?(' · <a href="${link}" target="_blank">Xem bài</a>'):''}</div></div>`;
-          resultsBox.insertAdjacentHTML('beforeend', line);
-        }
-      }catch(e){
-        rows.push({page_id: pid, page_name: '', status: 'ERROR', link: ''});
-        if(resultsBox){
-          resultsBox.insertAdjacentHTML('beforeend', `<div class="item"><div><strong>${pid}</strong></div><div class="conv-meta">ERROR</div></div>`);
+          const r=await fetch('/api/pages/'+pid+'/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})}); const d=await r.json(); if(d.error){ fail++; } else { ok++; }
         }
       }
-      done += 1;
-      if(progBar) progBar.style.width = Math.round((done/total)*100)+'%';
-      await new Promise(res=>setTimeout(res, 650)); // small spacing for safety
-    }
-    if(progText) progText.textContent = `Hoàn tất: ${done}/${total}`;
-    if(exportBtn){
-      exportBtn.disabled = false;
-      exportBtn.onclick = async ()=>{
-        try{
-          const r = await fetch('/api/export/posts_report', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({rows})});
-          if(r.status === 200){
-            const blob = await r.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href=url; a.download='posts_report.xlsx'; a.click();
-            URL.revokeObjectURL(url);
-          }
-        }catch(_){}
-      };
-    }
-  };
-})();
+    }catch(e){ fail++; }
+  }
+  st.textContent='Xong: '+ok+' thành công, '+fail+' lỗi.';
+}
+$('#btn_post_submit')?.addEventListener('click', batchPost);
 
-</script>
-  </div>
-
-<script>
-// ---- Safe SSE setup (tolerate 500/204) ----
-(function(){
-  const oldSetup = (typeof setupSSE === 'function') ? setupSSE : null;
-  window.setupSSE = function(){
-    try{
-      if (typeof EventSource === 'undefined') return;
-      var es = new EventSource('/stream/messages');
-      es.onerror = function(){ /* swallow SSE errors */ };
-      es.onopen = function(){ /* ok */ };
-      // Keep existing handlers if defined by page scripts
-      if(oldSetup && oldSetup!==window.setupSSE){ try{ oldSetup(); }catch(e){} }
-    }catch(e){ /* ignore */ }
-  };
-})();
-
-// ---- Minimal robust refreshConversations fallback ----
-window.refreshConversations = window.refreshConversations || (async function(){
-  const st   = document.querySelector('#inbox_conv_status');
-  const list = document.querySelector('#conversations');
-  if(!list) return;
-  const ids = Array.from(document.querySelectorAll('.pg-inbox:checked')).map(i=>i.value);
-  const onlyUnread = document.querySelector('#inbox_only_unread')?.checked ? 1 : 0;
-  if(!ids.length){ st && (st.textContent='Hãy chọn ít nhất 1 page'); list.innerHTML=''; return; }
-  st && (st.textContent='Đang tải hội thoại...');
+// Settings load/save
+async function loadSettings(){
+  const box=$('#settings_box'); const st=$('#settings_status');
   try{
-    const url = '/api/inbox/conversations?pages='+encodeURIComponent(ids.join(','))+'&only_unread='+onlyUnread+'&limit=50';
-    const r = await fetch(url); const d = await r.json();
-    if(d.error){ st && (st.textContent = JSON.stringify(d)); return; }
-    window.__convData = d.data || [];
-    list.innerHTML = (window.__convData).map((x,i)=>{
-      const when = x.updated_time ? new Date(x.updated_time).toLocaleString('vi-VN') : '';
-      const badge = x.unread ? '<span class="badge unread">Chưa đọc '+(x.unread_count||'')+'</span>' : '<span class="badge">Đã đọc</span>';
-      return '<div class="conv-item" data-idx="'+i+'">'
-        + '<div><div><strong>'+(x.senders||'(không rõ người gửi)')+'</strong> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>'
-        + '<div class="conv-meta">'+(x.snippet||'')+'</div></div>'
-        + '<div style="text-align:right; min-width:160px"><div class="conv-meta">'+when+'</div><div>'+badge+'</div></div>'
-        + '</div>';
-    }).join('') || '<div class="muted">Không có hội thoại.</div>';
-    st && (st.textContent = 'Tải ' + (window.__convData.length) + ' hội thoại.');
-  }catch(e){ st && (st.textContent='Không tải được hội thoại.'); }
+    const r=await fetch('/api/settings/get'); const d=await r.json();
+    const rows=(d.data||[]).map(s=>('<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap"><div style="min-width:120px"><b>'+s.name+'</b></div><input type="text" class="set-ai-key" data-id="'+s.id+'" placeholder="AI API Key" value="'+(s.ai_key||'')+'" style="flex:1;min-width:180px"><input type="text" class="set-link" data-id="'+s.id+'" placeholder="Link Page" value="'+(s.link||'')+'" style="flex:1;min-width:220px"><input type="text" class="set-keyword" data-id="'+s.id+'" placeholder="Keyword" value="'+(s.keyword||'')+'" style="flex:1;min-width:180px"><input type="text" class="set-zalo" data-id="'+s.id+'" placeholder="Zalo" value="'+(s.zalo||'')+'" style="width:160px"><input type="text" class="set-telegram" data-id="'+s.id+'" placeholder="Telegram" value="'+(s.telegram||'')+'" style="width:160px"></div>')).join('');
+    box.innerHTML=rows||'<div class="muted">Không có page.</div>'; st.textContent='Tải '+(d.data||[]).length+' page.';
+  }catch(e){ st.textContent='Lỗi tải cài đặt'; }
+}
+$('#btn_settings_save')?.addEventListener('click', async ()=>{
+  const items=[]; $all('.set-ai-key').forEach(inp=>{ const id=inp.getAttribute('data-id'); const link=document.querySelector('.set-link[data-id="'+id+'"]')?.value||''; const keyword=document.querySelector('.set-keyword[data-id="'+id+'"]')?.value||''; const zalo=document.querySelector('.set-zalo[data-id="'+id+'"]')?.value||''; const telegram=document.querySelector('.set-telegram[data-id="'+id+'"]')?.value||''; items.push({id, ai_key:inp.value||'', link, keyword, zalo, telegram}); });
+  const st=$('#settings_status'); try{ const r=await fetch('/api/settings/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})}); const d=await r.json(); st.textContent=d.ok?'Đã lưu.':(d.error||'Lỗi lưu'); }catch(e){ st.textContent='Lỗi lưu'; }
 });
+
+setInterval(()=>{ const any=$all('.pg-inbox:checked').length>0; if(any) refreshConversations(); }, 30000);
+
+loadPages();
+loadSettings();
 </script>
 </body>
-</html>
-"""
+</html>"""
 
 @app.route("/")
 def index():
@@ -1530,6 +590,33 @@ def api_inbox_messages():
         limit = 50
     if not conv_id:
         return jsonify({"error":"MISSING_CONVERSATION_ID"}), 400
+
+
+@app.route("/api/inbox/reply", methods=["POST"])
+def api_inbox_reply():
+    try:
+        body = request.get_json(force=True) or {}
+        conv_id = (body.get("conversation_id") or "").strip()
+        page_id = (body.get("page_id") or "").strip()
+        textmsg = (body.get("text") or "").strip()
+        user_id = (body.get("user_id") or "").strip()
+        if not textmsg:
+            return jsonify({"error":"Thiếu nội dung tin nhắn"}), 400
+        token = session.get("user_access_token") or (load_tokens().get("user_long") or {}).get("access_token")
+        if not token: return jsonify({"error":"NOT_LOGGED_IN"}), 401
+        page_token = get_page_access_token(page_id, token) if page_id else None
+        if conv_id and page_token:
+            data, st = graph_post(f"{conv_id}/messages", {"message": textmsg}, page_token, ctx_key="reply")
+            if st >= 400 and user_id and page_token:
+                data, st = graph_post("me/messages", {"recipient": json.dumps({"id": user_id}), "message": json.dumps({"text": textmsg})}, page_token, ctx_key="send_api")
+            return jsonify(data), st
+        if user_id and page_token:
+            data, st = graph_post("me/messages", {"recipient": json.dumps({"id": user_id}), "message": json.dumps({"text": textmsg})}, page_token, ctx_key="send_api")
+            return jsonify(data), st
+        return jsonify({"error":"Thiếu conversation_id hoặc page_id+user_id"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
     # Fetch conversation to know page_id and name
     # NOTE: Facebook Graph can return messages via /{conversation-id}/messages
@@ -1755,6 +842,26 @@ def api_post_photo(page_id):
     form = {"caption": cap, "published": "true"}
     data, status = graph_post_multipart(f"{page_id}/photos", files, form, page_token, ctx_key=_ctx_key_for_page(page_id))
     return jsonify(data), status
+
+
+@app.route("/api/pages/<page_id>/video", methods=["POST"])
+def api_post_video(page_id):
+    token = session.get("user_access_token") or (load_tokens().get("user_long") or {}).get("access_token")
+    if not token: return jsonify({"error":"NOT_LOGGED_IN"}), 401
+    page_token = get_page_access_token(page_id, token)
+    if not page_token: return jsonify({"error":"NO_PAGE_TOKEN"}), 403
+    cap = request.form.get("description","") or request.form.get("caption","")
+    if "video" in request.files:
+        file = request.files["video"]
+        files = {"source": (file.filename, file.stream, file.mimetype or "application/octet-stream")}
+        form = {"description": cap}
+        data, status = graph_post_multipart(f"{page_id}/videos", files, form, page_token, ctx_key=_ctx_key_for_page(page_id))
+        return jsonify(data), status
+    url = (request.form.get("file_url") or request.form.get("url") or "").strip()
+    if not url: return jsonify({"error":"MISSING_VIDEO"}), 400
+    data, status = graph_post(f"{page_id}/videos", {"file_url": url, "description": cap}, page_token, ctx_key=_ctx_key_for_page(page_id))
+    return jsonify(data), status
+
 
 # ----------------------------
 # AI writer
