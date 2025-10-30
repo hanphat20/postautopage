@@ -1,4 +1,3 @@
-
 import json
 import os
 import time
@@ -263,8 +262,8 @@ INDEX_HTML = r"""<!doctype html>
     try{
       const r = await fetch('/api/pages'); const d = await r.json();
       const pages = d.data || [];
-      const html = pages.map(p=>('<label class="checkbox"><input type="checkbox" class="pg-inbox" value="'+p.id+'"> '+p.name+'</label>')).join('');
-      const html2= pages.map(p=>('<label class="checkbox"><input type="checkbox" class="pg-post" value="'+p.id+'"> '+p.name+'</label>')).join('');
+      const html = pages.map(p=>('<label class="checkbox"><input type="checkbox" class="pg-inbox" value="'+p.id+'"> '+(p.name||p.id)+'</label>')).join('');
+      const html2= pages.map(p=>('<label class="checkbox"><input type="checkbox" class="pg-post" value="'+p.id+'"> '+(p.name||p.id)+'</label>')).join('');
       box1.innerHTML = html; box2.innerHTML = html2;
       st1 && (st1.textContent = 'Tải ' + pages.length + ' page.'); 
       st2 && (st2.textContent = 'Tải ' + pages.length + ' page.');
@@ -294,6 +293,23 @@ INDEX_HTML = r"""<!doctype html>
     }
   }
 
+  function safeSenders(x){
+    let senders = '(Không rõ)';
+    try{
+      if (x.senders && x.senders.data && Array.isArray(x.senders.data)){
+        senders = x.senders.data.map(s => (s.name || s.username || s.id || '')).filter(Boolean).join(', ');
+      } else if (Array.isArray(x.senders)){
+        senders = x.senders.map(s => (s.name || s.username || s.id || '')).filter(Boolean).join(', ');
+      } else if (typeof x.senders === 'object' && x.senders){
+        const cand = x.senders.name || x.senders.username || x.senders.id;
+        if (cand) senders = cand;
+      } else if (typeof x.senders === 'string'){
+        senders = x.senders;
+      }
+    }catch(e){}
+    return senders;
+  }
+
   function renderConversations(items){
     const list = $('#conversations'); const st = $('#inbox_conv_status');
     if(!list) return;
@@ -301,21 +317,16 @@ INDEX_HTML = r"""<!doctype html>
       const when = x.updated_time ? new Date(x.updated_time).toLocaleString('vi-VN') : '';
       const unread = (x.unread_count && x.unread_count>0);
       const badge = unread ? '<span class="badge unread">Chưa đọc '+(x.unread_count||'')+'</span>' : '<span class="badge">Đã đọc</span>';
-      // format senders
-      let senders = '(Không rõ)';
-      try{
-        if(x.senders && x.senders.data && Array.isArray(x.senders.data)){
-          senders = x.senders.data.map(s=>s.name||'').filter(Boolean).join(', ');
-        }else if(typeof x.senders === 'string'){
-          senders = x.senders;
-        }
-      }catch(e){}
+      let senders = safeSenders(x);
+      // chuẩn hoá link facebook
+      let openLink = x.link || '';
+      if (openLink && openLink.startsWith('/')) { openLink = 'https://facebook.com' + openLink; }
       return '<div class="conv-item" data-idx="'+i+'">\
         <div>\
           <div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>\
           <div class="conv-meta">'+(x.snippet||'')+'</div>\
         </div>\
-        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(x.link?('<div style="margin-top:4px"><a target="_blank" href="'+x.link+'">Mở trên Facebook</a></div>'):'')+'</div>\
+        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(openLink?('<div style="margin-top:4px"><a target="_blank" href="'+openLink+'">Mở trên Facebook</a></div>'):'')+'</div>\
       </div>';
     }).join('') || '<div class="muted">Không có hội thoại.</div>';
     st && (st.textContent = 'Tải ' + items.length + ' hội thoại.');
@@ -352,7 +363,7 @@ INDEX_HTML = r"""<!doctype html>
       if(candidate) conv.user_id = candidate.id;
     }
     const box = $('#thread_messages'); const head = $('#thread_header'); const st = $('#thread_status');
-    head && (head.textContent = (conv.senders||'') + ' · ' + (conv.page_name||''));
+    head && (head.textContent = (safeSenders(conv)||'') + ' · ' + (conv.page_name||''));
     box.innerHTML = '<div class="muted">Đang tải tin nhắn...</div>';
     try{
       const r = await fetch('/api/inbox/messages?conversation_id='+encodeURIComponent(conv.id)+'&page_id='+encodeURIComponent(conv.page_id||''));
@@ -379,7 +390,7 @@ INDEX_HTML = r"""<!doctype html>
     loadThreadByIndex(+it.getAttribute('data-idx'));
   });
 
-  // Gửi reply
+  // Gửi reply: Enter để gửi hoặc bấm nút
   $('#reply_text')?.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); $('#btn_reply')?.click(); } });
   $('#btn_reply')?.addEventListener('click', async ()=>{
     const input = $('#reply_text'); const txt = (input.value||'').trim();
@@ -395,8 +406,10 @@ INDEX_HTML = r"""<!doctype html>
       const d = await r.json();
       if(d.error){
         const conv = window.__currentConv||{};
-        const fbLink = conv.link ? (' <a target="_blank" href="'+conv.link+'">Mở trên Facebook</a>') : '';
-        st.innerHTML = (d.error + fbLink);
+        let fbLink = conv.link || '';
+        if (fbLink && fbLink.startsWith('/')) { fbLink = 'https://facebook.com' + fbLink; }
+        const open = fbLink ? (' <a target="_blank" href="'+fbLink+'">Mở trên Facebook</a>') : '';
+        st.innerHTML = (d.error + open);
         return;
       }
       input.value='';
@@ -407,11 +420,11 @@ INDEX_HTML = r"""<!doctype html>
   });
 
   // Đăng bài
-  // AI generate
+  // AI generate (tận dụng keyword/source đã lưu cho page)
   $('#btn_ai_generate')?.addEventListener('click', async ()=>{
     const prompt = ($('#ai_prompt')?.value||'').trim();
     const st = $('#post_status'); const pids = $all('.pg-post:checked').map(i=>i.value);
-    if(!prompt){ st.textContent='Nhập prompt'; return; }
+    if(!pids.length){ st.textContent='Chọn ít nhất 1 Page'; return; }
     const page_id = pids[0] || null; // ưu tiên dùng key của page đầu tiên đang chọn
     st.textContent='Đang tạo bằng AI...';
     try{
@@ -432,7 +445,7 @@ INDEX_HTML = r"""<!doctype html>
     return d;
   }
 
-  // Override posting submit to include media + post_type
+  // Submit đăng bài (chỉ giữ 1 handler đầy đủ)
   $('#btn_post_submit')?.addEventListener('click', async ()=>{
     const pids = $all('.pg-post:checked').map(i=>i.value);
     const textVal = ($('#post_text')?.value||'').trim();
@@ -450,27 +463,11 @@ INDEX_HTML = r"""<!doctype html>
       const r = await fetch('/api/pages/post', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
       const d = await r.json();
       if(d.error){ st.textContent = d.error; return; }
-      st.textContent = 'Xong: ' + (d.results||[]).length + ' page' + ((d.results||[]).some(x=>x.note)?' (có ghi chú)':''); 
+      st.textContent = 'Xong: ' + (d.results||[]).length + ' page' + ((d.results||[]).some(x=>x.note)?' (có ghi chú)':'');
     }catch(e){ st.textContent = 'Lỗi đăng bài'; }
   });
 
-  $('#btn_post_submit')?.addEventListener('click', async ()=>{
-    const pids = $all('.pg-post:checked').map(i=>i.value);
-    const text = $('#post_text').value.trim();
-    const img  = $('#post_image_url').value.trim();
-    const st   = $('#post_status');
-    if(!pids.length){ st.textContent='Chọn ít nhất 1 Page'; return; }
-    if(!text){ st.textContent='Nhập nội dung'; return; }
-    st.textContent='Đang đăng...';
-    try{
-      const r = await fetch('/api/pages/post', {method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({pages:pids, text, image_url:img||null})
-      });
-      const d = await r.json();
-      st.textContent = d.error ? d.error : 'Đăng xong.';
-    }catch(e){ st.textContent='Lỗi đăng bài'; }
-  });
-
+  // SSE optional
   try{
     const es = new EventSource('/stream/messages');
     es.onmessage = (ev)=>{ };
@@ -486,9 +483,9 @@ INDEX_HTML = r"""<!doctype html>
       const r = await fetch('/api/settings/get'); const d = await r.json();
       const rows = (d.data||[]).map(s => (
         '<div class="row" style="gap:8px;align-items:center">' +
-        '<div style="min-width:140px"><b>'+s.name+'</b></div>' +
-        '<input type="text" class="set-ai-key" data-id="'+s.id+'" placeholder="AI API Key" value="'+(s.ai_key||'')+'" style="flex:1">' +
-        '<input type="text" class="set-link" data-id="'+s.id+'" placeholder="Link Trang/Page" value="'+(s.link||'')+'" style="flex:1">' +
+        '<div style="min-width:180px"><b>'+ (s.name||s.id) +'</b></div>' +
+        '<input type="text" class="set-keyword" data-id="'+s.id+'" placeholder="Từ khoá" value="'+(s.keyword||'')+'" style="flex:1">' +
+        '<input type="text" class="set-source" data-id="'+s.id+'" placeholder="Link nguồn/truy cập" value="'+(s.source||'')+'" style="flex:1">' +
         '</div>'
       )).join('');
       box.innerHTML = rows || '<div class="muted">Không có page.</div>';
@@ -497,10 +494,10 @@ INDEX_HTML = r"""<!doctype html>
   }
   $('#btn_settings_save')?.addEventListener('click', async ()=>{
     const items = [];
-    $all('.set-ai-key').forEach(inp => {
+    $all('.set-keyword').forEach(inp => {
       const id = inp.getAttribute('data-id');
-      const link = document.querySelector('.set-link[data-id="'+id+'"]')?.value || '';
-      items.push({id, ai_key: inp.value||'', link});
+      const source = document.querySelector('.set-source[data-id="'+id+'"]')?.value || '';
+      items.push({id, keyword: inp.value||'', source});
     });
     const st = $('#settings_status');
     try{
@@ -565,6 +562,14 @@ def api_inbox_conversations():
         fields = "updated_time,snippet,senders,unread_count,can_reply,participants,link"
         for pid in page_ids:
             token = get_page_token(pid)
+            # Lấy tên page thật để hiển thị
+            page_name = f"Page {pid}"
+            try:
+                info = fb_get(pid, {"access_token": token, "fields": "name"})
+                page_name = info.get("name", page_name)
+            except Exception:
+                pass
+
             data = fb_get(f"{pid}/conversations", {
                 "access_token": token,
                 "limit": limit,
@@ -572,7 +577,7 @@ def api_inbox_conversations():
             })
             for c in data.get("data", []):
                 c["page_id"] = pid
-                c["page_name"] = f"Page {pid}"
+                c["page_name"] = page_name
                 # pick user_id (PSID) from participants if available
                 try:
                     parts = c.get("participants", {}).get("data", [])
@@ -690,15 +695,19 @@ def api_inbox_reply():
         return jsonify({"error": str(e)})
 
 
-# ------------------------ Settings ------------------------
+# ------------------------ Settings (keyword + source per page) ------------------------
 @app.route("/api/settings/get")
 def api_settings_get():
     data = _load_settings()
-    # build list for UI
     pages = []
     for pid, token in PAGE_TOKENS.items():
+        try:
+            info = fb_get(pid, {"access_token": token, "fields": "name"})
+            name = info.get("name", f"Page {pid}")
+        except Exception:
+            name = f"Page {pid}"
         s = (data.get(pid) or {})
-        pages.append({"id": pid, "name": f"Page {pid}", "ai_key": s.get("ai_key",""), "link": s.get("link","")})
+        pages.append({"id": pid, "name": name, "keyword": s.get("keyword",""), "source": s.get("source","")})
     return jsonify({"data": pages})
 
 @app.route("/api/settings/save", methods=["POST"])
@@ -709,14 +718,68 @@ def api_settings_save():
     for it in items:
         pid = it.get("id")
         if not pid: continue
-        data[pid] = {"ai_key": it.get("ai_key",""), "link": it.get("link","")}
+        data[pid] = {"keyword": it.get("keyword",""), "source": it.get("source","")}
     _save_settings(data)
     return jsonify({"ok": True})
+
+
+# ------------------------ API: AI generate from settings ------------------------
+@app.route("/api/ai/generate", methods=["POST"])
+def api_ai_generate():
+    js = request.get_json(force=True) or {}
+    page_id = js.get("page_id") or ""
+    prompt = (js.get("prompt") or "").strip()
+
+    if not page_id:
+        return jsonify({"error": "Chưa chọn Page"})
+
+    settings = _load_settings()
+    conf = settings.get(page_id) or {}
+    keyword = (conf.get("keyword") or "").strip()
+    source  = (conf.get("source") or "").strip()
+
+    if not keyword and not source:
+        return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
+
+    lines = []
+    if keyword:
+        lines.append(f"📌 Chủ đề: {keyword}")
+    if source:
+        lines.append(f"🔗 Tham khảo: {source}")
+    if prompt:
+        lines.append("")
+        lines.append(f"Yêu cầu thêm: {prompt}")
+
+    lines.append("")
+    lines.append("———")
+    lines.append(f"{keyword or 'Bài viết'} – tóm tắt ngắn:")
+    lines.append(f"- Giới thiệu nhanh về {keyword.lower() if keyword else 'chủ đề'}")
+    lines.append("- 3 lợi ích chính cho người đọc")
+    lines.append("- Gợi ý hành động (CTA) rõ ràng")
+    if source:
+        lines.append(f"\n➡️ Xem chi tiết: {source}")
+
+    text = "\n".join(lines).strip()
+    return jsonify({"text": text})
+
+
+# ------------------------ Upload (optional for media local) ------------------------
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    """Simple local upload to /mnt/data and return path for later"""
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error":"Không có file"})
+    base = "/mnt/data"
+    os.makedirs(base, exist_ok=True)
+    save_path = os.path.join(base, f.filename)
+    f.save(save_path)
+    return jsonify({"ok": True, "path": save_path})
+
 
 # ------------------------ API: Post to pages ------------------------
 
 @app.route("/api/pages/post", methods=["POST"])
-
 def api_pages_post():
     try:
         js = request.get_json(force=True) or {}
@@ -780,3 +843,36 @@ def api_pages_post():
     except Exception as e:
         return jsonify({"error": str(e)})
 
+
+# ------------------------ Minimal webhook endpoints (optional) ------------------------
+@app.route("/webhook/events", methods=["GET","POST"])
+def webhook_events():
+    if request.method == "GET":
+        mode = request.args.get("hub.mode")
+        token = request.args.get("hub.verify_token")
+        challenge = request.args.get("hub.challenge")
+        if mode == "subscribe" and token == VERIFY_TOKEN:
+            return Response(challenge, status=200)
+        return Response("forbidden", status=403)
+    # POST: just acknowledge
+    return jsonify({"ok": True})
+
+
+# ------------------------ SSE (dummy) ------------------------
+@app.route("/stream/messages")
+def stream_messages():
+    if DISABLE_SSE:
+        return Response("SSE disabled", status=200, mimetype="text/plain")
+
+    def gen():
+        yield "retry: 15000\n\n"
+        while True:
+            time.sleep(15)
+            yield "data: {}\n\n"
+
+    return Response(gen(), mimetype="text/event-stream")
+
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=True)
