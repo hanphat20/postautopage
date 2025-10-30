@@ -4,4 +4,4 @@ gunicorn>=21.2
 python-dotenv
 Pillow
 aiohttp
-openpyxl     # để xuất .xlsx; nếu thiếu, app sẽ tự fallback sang CSV
+openpyxl
