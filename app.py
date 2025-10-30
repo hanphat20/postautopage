@@ -20,6 +20,22 @@ app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
 
+SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/mnt/data/page_settings.json')
+
+def _load_settings():
+    try:
+        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_settings(data: dict):
+    try:
+        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
 FB_CONNECT_TIMEOUT = float(os.getenv("FB_CONNECT_TIMEOUT", "5"))
 FB_READ_TIMEOUT    = float(os.getenv("FB_READ_TIMEOUT", "45"))
 FB_RETRIES         = int(os.getenv("FB_RETRIES", "3"))
@@ -198,10 +214,21 @@ INDEX_HTML = r"""<!doctype html>
       <div class="row"><label class="checkbox"><input type="checkbox" id="post_select_all"> Chọn tất cả</label></div>
       <div class="pages-box" id="post_pages_box"></div>
       <div class="row" style="margin-top:8px">
-        <textarea id="post_text" placeholder="Nội dung..."></textarea>
+        <textarea id="ai_prompt" placeholder="Prompt để AI viết bài..."></textarea>
+        <div class="row">
+          <button class="btn" id="btn_ai_generate">Tạo nội dung bằng AI</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <textarea id="post_text" placeholder="Nội dung (có thể chỉnh sau khi AI tạo)..."></textarea>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="checkbox"><input type="radio" name="post_type" value="feed" checked> Đăng lên Feed</label>
+        <label class="checkbox"><input type="radio" name="post_type" value="reels"> Đăng Reels (video)</label>
       </div>
       <div class="row">
-        <input type="text" id="post_image_url" placeholder="URL ảnh (tuỳ chọn)" style="flex:1">
+        <input type="text" id="post_media_url" placeholder="URL ảnh/video (tuỳ chọn)" style="flex:1">
+        <input type="file" id="post_media_file" accept="image/*,video/*">
         <button class="btn primary" id="btn_post_submit">Đăng</button>
       </div>
       <div class="status" id="post_status"></div>
@@ -210,6 +237,9 @@ INDEX_HTML = r"""<!doctype html>
     <div id="tab-settings" class="tab card" style="display:none">
       <h3>Cài đặt</h3>
       <div class="muted">Webhook URL: <code>/webhook/events</code> · SSE: <code>/stream/messages</code></div>
+      <div class="status" id="settings_status"></div>
+      <div id="settings_box" class="pages-box"></div>
+      <div class="row"><button class="btn primary" id="btn_settings_save">Lưu cài đặt</button></div>
     </div>
   </div>
 
@@ -377,6 +407,53 @@ INDEX_HTML = r"""<!doctype html>
   });
 
   // Đăng bài
+  // AI generate
+  $('#btn_ai_generate')?.addEventListener('click', async ()=>{
+    const prompt = ($('#ai_prompt')?.value||'').trim();
+    const st = $('#post_status'); const pids = $all('.pg-post:checked').map(i=>i.value);
+    if(!prompt){ st.textContent='Nhập prompt'; return; }
+    const page_id = pids[0] || null; // ưu tiên dùng key của page đầu tiên đang chọn
+    st.textContent='Đang tạo bằng AI...';
+    try{
+      const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({page_id, prompt})});
+      const d = await r.json();
+      if(d.error){ st.textContent=d.error; return; }
+      $('#post_text').value = (d.text||'').trim();
+      st.textContent='Đã tạo xong.';
+    }catch(e){ st.textContent='Lỗi AI'; }
+  });
+
+  async function maybeUploadLocal(){
+    const file = $('#post_media_file')?.files?.[0];
+    if(!file) return null;
+    const fd = new FormData(); fd.append('file', file);
+    const r = await fetch('/api/upload', {method:'POST', body: fd});
+    const d = await r.json(); if(d.error) throw new Error(d.error);
+    return d;
+  }
+
+  // Override posting submit to include media + post_type
+  $('#btn_post_submit')?.addEventListener('click', async ()=>{
+    const pids = $all('.pg-post:checked').map(i=>i.value);
+    const textVal = ($('#post_text')?.value||'').trim();
+    const url = ($('#post_media_url')?.value||'').trim();
+    const postType = (document.querySelector('input[name="post_type"]:checked')?.value)||'feed';
+    const st = $('#post_status');
+    if(!pids.length){ st.textContent='Chọn ít nhất 1 Page'; return; }
+    if(!textVal && !url && !$('#post_media_file')?.files?.length){ st.textContent='Nhập nội dung hoặc chọn media'; return; }
+    st.textContent='Đang đăng...';
+
+    try{
+      let uploadInfo = null;
+      if($('#post_media_file')?.files?.length){ uploadInfo = await maybeUploadLocal(); }
+      const payload = {pages: pids, text: textVal, media_url: url||null, media_path: uploadInfo?.path||null, post_type: postType};
+      const r = await fetch('/api/pages/post', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+      const d = await r.json();
+      if(d.error){ st.textContent = d.error; return; }
+      st.textContent = 'Xong: ' + (d.results||[]).length + ' page' + ((d.results||[]).some(x=>x.note)?' (có ghi chú)':''); 
+    }catch(e){ st.textContent = 'Lỗi đăng bài'; }
+  });
+
   $('#btn_post_submit')?.addEventListener('click', async ()=>{
     const pids = $all('.pg-post:checked').map(i=>i.value);
     const text = $('#post_text').value.trim();
@@ -401,6 +478,38 @@ INDEX_HTML = r"""<!doctype html>
   }catch(e){}
 
   loadPages();
+  loadSettings();
+
+  async function loadSettings(){
+    const box = $('#settings_box'); const st = $('#settings_status');
+    try{
+      const r = await fetch('/api/settings/get'); const d = await r.json();
+      const rows = (d.data||[]).map(s => (
+        '<div class="row" style="gap:8px;align-items:center">' +
+        '<div style="min-width:140px"><b>'+s.name+'</b></div>' +
+        '<input type="text" class="set-ai-key" data-id="'+s.id+'" placeholder="AI API Key" value="'+(s.ai_key||'')+'" style="flex:1">' +
+        '<input type="text" class="set-link" data-id="'+s.id+'" placeholder="Link Trang/Page" value="'+(s.link||'')+'" style="flex:1">' +
+        '</div>'
+      )).join('');
+      box.innerHTML = rows || '<div class="muted">Không có page.</div>';
+      st.textContent = 'Tải ' + (d.data||[]).length + ' page cho cài đặt.';
+    }catch(e){ st.textContent = 'Lỗi tải cài đặt'; }
+  }
+  $('#btn_settings_save')?.addEventListener('click', async ()=>{
+    const items = [];
+    $all('.set-ai-key').forEach(inp => {
+      const id = inp.getAttribute('data-id');
+      const link = document.querySelector('.set-link[data-id="'+id+'"]')?.value || '';
+      items.push({id, ai_key: inp.value||'', link});
+    });
+    const st = $('#settings_status');
+    try{
+      const r = await fetch('/api/settings/save', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({items})});
+      const d = await r.json();
+      st.textContent = d.ok ? 'Đã lưu.' : (d.error||'Lỗi lưu');
+    }catch(e){ st.textContent = 'Lỗi lưu'; }
+  });
+
   // Polling đơn giản mỗi 30s để cập nhật số lượng chưa đọc
   setInterval(()=>{
     const anyChecked = $all('.pg-inbox:checked').length>0;
@@ -581,77 +690,93 @@ def api_inbox_reply():
         return jsonify({"error": str(e)})
 
 
+# ------------------------ Settings ------------------------
+@app.route("/api/settings/get")
+def api_settings_get():
+    data = _load_settings()
+    # build list for UI
+    pages = []
+    for pid, token in PAGE_TOKENS.items():
+        s = (data.get(pid) or {})
+        pages.append({"id": pid, "name": f"Page {pid}", "ai_key": s.get("ai_key",""), "link": s.get("link","")})
+    return jsonify({"data": pages})
+
+@app.route("/api/settings/save", methods=["POST"])
+def api_settings_save():
+    js = request.get_json(force=True) or {}
+    items = js.get("items", [])
+    data = _load_settings()
+    for it in items:
+        pid = it.get("id")
+        if not pid: continue
+        data[pid] = {"ai_key": it.get("ai_key",""), "link": it.get("link","")}
+    _save_settings(data)
+    return jsonify({"ok": True})
+
 # ------------------------ API: Post to pages ------------------------
 
 @app.route("/api/pages/post", methods=["POST"])
+
 def api_pages_post():
     try:
         js = request.get_json(force=True) or {}
         pages: t.List[str] = js.get("pages", [])
-        text = (js.get("text") or "").strip()
-        image_url = (js.get("image_url") or "").strip() or None
+        text_content = (js.get("text") or "").strip()
+        media_url = (js.get("image_url") or js.get("media_url") or "").strip() or None
+        media_path = (js.get("media_path") or "").strip() or None
+        post_type = (js.get("post_type") or "feed").strip()  # feed | reels
 
         if not pages:
             return jsonify({"error": "Chọn ít nhất 1 page"})
-        if not text:
-            return jsonify({"error": "Thiếu nội dung"})
+        if not text_content and not media_url and not media_path:
+            return jsonify({"error": "Thiếu nội dung hoặc media"})
 
         results = []
         for pid in pages:
             token = get_page_token(pid)
-            if image_url:
-                out = fb_post(f"{pid}/photos", {
-                    "url": image_url,
-                    "caption": text,
-                    "access_token": token,
-                })
-            else:
-                out = fb_post(f"{pid}/feed", {
-                    "message": text,
-                    "access_token": token,
-                })
-            results.append({"page_id": pid, "result": out})
 
+            # Decide media type
+            is_video = False
+            if media_path:
+                lower = media_path.lower()
+                is_video = lower.endswith(('.mp4','.mov','.mkv','.avi','.webm'))
+            elif media_url:
+                lower = media_url.lower()
+                is_video = any(ext in lower for ext in ['.mp4','.mov','.mkv','.avi','.webm'])
+
+            try:
+                if media_path:  # local upload
+                    if is_video:
+                        with open(media_path, 'rb') as f:
+                            out = session.post(f"{FB_API}/{pid}/videos",
+                                               params={"access_token": token},
+                                               files={"source": (os.path.basename(media_path), f)},
+                                               data={"description": text_content},
+                                               timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT)).json()
+                    else:
+                        with open(media_path, 'rb') as f:
+                            out = session.post(f"{FB_API}/{pid}/photos",
+                                               params={"access_token": token},
+                                               files={"source": (os.path.basename(media_path), f)},
+                                               data={"caption": text_content},
+                                               timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT)).json()
+                elif media_url:
+                    if is_video:
+                        out = fb_post(f"{pid}/videos", {"file_url": media_url, "description": text_content, "access_token": token})
+                    else:
+                        out = fb_post(f"{pid}/photos", {"url": media_url, "caption": text_content, "access_token": token})
+                else:
+                    # text only
+                    out = fb_post(f"{pid}/feed", {"message": text_content, "access_token": token})
+
+                # NOTE: Facebook Reels for Pages API có thể khác; nếu chọn reels nhưng chúng ta đăng video qua /videos, trả kèm note
+                note = None
+                if post_type == 'reels' and not is_video:
+                    note = 'Reels yêu cầu video; đã đăng như Feed do không có video.'
+                results.append({"page_id": pid, "result": out, "note": note})
+            except Exception as e:
+                results.append({"page_id": pid, "error": str(e)})
         return jsonify({"ok": True, "results": results})
     except Exception as e:
         return jsonify({"error": str(e)})
 
-
-# ------------------------ Webhook ------------------------
-
-@app.route("/webhook/events", methods=["GET", "POST"])
-def webhook_events():
-    if request.method == "GET":
-        mode = request.args.get("hub.mode")
-        token = request.args.get("hub.verify_token")
-        challenge = request.args.get("hub.challenge")
-        if mode == "subscribe" and token == VERIFY_TOKEN:
-            return make_response(challenge, 200)
-        return make_response("FORBIDDEN", 403)
-
-    # POST: just acknowledge quickly
-    try:
-        body = request.get_json(silent=True) or {}
-        app.logger.info("Webhook event: %s", json.dumps(body)[:500])
-    except Exception:
-        pass
-    return make_response("OK", 200)
-
-
-# ------------------------ SSE (optional) ------------------------
-
-@app.route("/stream/messages")
-def stream_messages():
-    if DISABLE_SSE:
-        return make_response(("", 204))
-    def gen():
-        while True:
-            yield f"data: ping {int(time.time())}\n\n"
-            time.sleep(10)
-    return Response(gen(), mimetype="text/event-stream")
-
-
-# ------------------------ Main ------------------------
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
