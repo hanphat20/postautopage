@@ -796,13 +796,11 @@ def api_settings_save():
 
 # ------------------------ API: AI generate from settings ------------------------
 
+
+
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
-    """
-    Generate post text in the FB-form style using keyword & source from Settings.
-    Adds light randomization to reduce duplication and stores recent hashes to avoid reposting
-    identical texts (per page).
-    """
+    """Compose single-line post in the format from reference file, using settings (keyword, source, phone, telegram)."""
     js = request.get_json(force=True) or {}
     page_id = (js.get("page_id") or "").strip()
     prompt  = (js.get("prompt")  or "").strip()
@@ -810,134 +808,56 @@ def api_ai_generate():
     if not page_id:
         return jsonify({"error": "Chưa chọn Page"})
 
-    settings = _load_settings()
-    conf = settings.get(page_id) or {}
-    keyword = (conf.get("keyword") or "").strip()
-    source  = (conf.get("source")  or "").strip()
+    conf = (_load_settings().get(page_id) or {})
+    keyword  = (conf.get("keyword") or "").strip()
+    link     = (conf.get("source")  or "").strip()
+    phone    = (conf.get("phone") or "").strip()
+    telegram = (conf.get("telegram") or "").strip()
 
-    if not keyword and not source:
+    if not (keyword and link):
         return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
 
-    # Optional overrides/metadata
-    brand    = (js.get("brand") or "").strip()
-    hotline  = (js.get("hotline") or "").strip()
-    telegram = (js.get("telegram") or "").strip()
-    hashtags = (js.get("hashtags") or "").strip()
-    cta      = (js.get("cta") or "Đăng ký / Đăng nhập ngay").strip()
+    import re as _re
+    keyword_no_space = _re.sub(r"\s+", "", keyword)
+    kw_tag_lower = "#" + keyword_no_space.lower()
 
-    # --- Randomization helpers (to avoid duplicates) ---
-    import random
-    random.seed(time.time_ns() % (2**32-1))
+    intro = f"🌟 Chào mừng bạn đến với {keyword} – nơi giải trí không giới hạn!"
+    link_line = f"{kw_tag_lower} link chính thức không bị chặn 🔗 {link}"
+    desc = (f"Khám phá thế giới game đa dạng và hấp dẫn tại {keyword}! "
+            f"Trải nghiệm an toàn, nhanh và ổn định, vui chơi không lo bị chặn.")
 
-    stars = random.choice(["🌟", "✨", "💫", "⭐️"])
-    shield = random.choice(["🛡️", "🔒", "✅"])
-    rocket = random.choice(["🚀", "➡️", "👉"])
-    dot    = random.choice(["•", "-", "–"])
+    important = ("**Thông tin quan trọng:** - ✅ Bảo mật - ⚡ Giao dịch nhanh - 🌐 Hỗ trợ 24/7 - 🎮 Nội dung đa dạng - ⏱️ Tốc độ ổn định")
 
-    # Flexible phrasings
-    opening_variants = [
-        "{stars} {brand}{kw} Chính Thức – Không Bị Chặn {stars}",
-        "{stars} Truy cập {brand}{kw} bản chính thức – truy cập mượt mà {stars}",
-        "{stars} Link {brand}{kw} chuẩn – không lo chặn {stars}",
-    ]
-    subline_variants = [
-        "#{tag} {src}",
-        "Link chuẩn: {src}",
-        "Trang chính thức: {src}",
-    ]
-    intro_variants = [
-        f"Truy cập link chính thức để không gặp vấn đề bảo mật hay bị chặn. {shield} Đảm bảo giao dịch mượt mà và không bị gián đoạn.",
-        f"Vào đúng link để tránh rủi ro chặn/giả mạo. {shield} Kết nối ổn định, an toàn.",
-        f"Dùng link xác thực để trải nghiệm trơn tru và an toàn. {shield}",
-    ]
-    bullet_groups = [
-        [
-            "Truy cập nhanh, không lỗi chặn trang.",
-            "Đội ngũ hỗ trợ giúp lấy lại tiền nếu nhập sai link.",
-            "Hỗ trợ mở khoá tài khoản và rút tiền nhanh chóng.",
-        ],
-        [
-            "Đi đúng link, hạn chế rủi ro bảo mật.",
-            "CSKH 24/7 sẵn sàng xử lý sự cố.",
-            "Rút/nạp mượt, xác minh nhanh.",
-        ],
-        [
-            "Tối ưu tốc độ truy cập, hạn chế gián đoạn.",
-            "Hướng dẫn chi tiết khi gặp lỗi.",
-            "Bảo vệ tài khoản, khôi phục kịp thời.",
-        ],
-    ]
+    contact_parts = []
+    if phone:
+        contact_parts.append(f"📞 {phone}")
+    if telegram:
+        contact_parts.append(f"💬 Telegram:{telegram}")
+    contact = ("**Thông tin liên hệ:** " + "  ".join(contact_parts)) if contact_parts else ""
 
-    # Build text
-    lines = []
-    title_tpl = random.choice(opening_variants)
-    title = title_tpl.format(stars=stars, brand=(brand + " - " if brand else ""), kw=keyword)
-    lines.append(title)
+    fixed_tags = ["#linkchinhthuc", "#antoan", "#hotro247", "#khongbichan", "#uudai", "#naprutnhanh"]
+    hashtags = " ".join([f"#{keyword_no_space}", f"#{keyword_no_space}vn"] + fixed_tags)
 
-    if source:
-        sub_tpl = random.choice(subline_variants)
-        lines.append(sub_tpl.format(tag=keyword.replace(" ", ""), src=source))
-
-    lines.append("")
-    lines.append(random.choice(intro_variants))
-
-    lines.append("")
-    lines.append("Thông tin quan trọng:")
-    for b in random.choice(bullet_groups):
-        lines.append(f"{dot} {b}")
-
-    if hotline or telegram:
-        lines.append("")
-        lines.append("Thông tin liên hệ hỗ trợ:")
-        if hotline:  lines.append(f"SDT: {hotline}")
-        if telegram: lines.append(f"Telegram: {telegram}")
-
-    if hashtags:
-        # Shuffle order a bit to avoid exact duplicates
-        tags = [t for t in hashtags.split() if t.startswith("#")]
-        random.shuffle(tags)
-        if tags:
-            lines.append("")
-            lines.append("Hashtags:")
-            lines.append(" ".join(tags))
-
-    if source:
-        lines.append("")
-        lines.append(f"{rocket} {cta}: {source}")
-
+    pieces = [intro, link_line, desc, important, contact, hashtags]
     if prompt:
-        lines.append("")
-        lines.append(f"Yêu cầu thêm: {prompt}")
+        pieces.append(f"(Lưu ý: {prompt})")
+    text = " ".join([p for p in pieces if p]).strip()
 
-    text = "\\n".join(lines).strip()
-
-    # --- Deduplicate check per page (store rolling hashes) ---
+    # dedupe history
+    import hashlib, json
     hist_path = "/mnt/data/post_history.json"
     try:
-        with open(hist_path, "r", encoding="utf-8") as f:
-            hist = json.load(f)
+        hist = json.load(open(hist_path, "r", encoding="utf-8"))
     except Exception:
         hist = {}
-
-    def _hash(s: str) -> str:
-        import hashlib
-        return hashlib.sha256(s.encode("utf-8")).hexdigest()
-
-    page_hist = hist.get(page_id, [])[:100]  # keep last 100
-    h = _hash(text)
-    # If duplicate, tweak with a tiny variation once
+    h = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    page_hist = hist.get(page_id, [])
     if h in page_hist:
-        lines.append("\\nP/S: {0}".format(random.choice([
-            "Ưu đãi cập nhật mỗi ngày.", "Đừng quên kiểm tra tin nhắn hỗ trợ.", "Giữ đường link để truy cập nhanh."
-        ])))
-        text = "\\n".join(lines).strip()
-        h = _hash(text)
-
-    page_hist = [h] + page_hist
-    hist[page_id] = page_hist[:100]
+        text += " P/S: Kiểm tra ưu đãi mới nhất hôm nay."
+        h = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    hist[page_id] = ([h] + page_hist)[:100]
     try:
-        with open(hist_path, "w", encoding="utf-8") as f:
-            json.dump(hist, f, ensure_ascii=False, indent=2)
+        json.dump(hist, open(hist_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     except Exception:
         pass
 
