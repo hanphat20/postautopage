@@ -1771,7 +1771,7 @@ def api_ai_generate():
     phone = (body.get("phone") or "").strip()
     telegram = (body.get("telegram") or "").strip()
     if not phone:
-        phone = "0927395058"
+        phone = "0363169604"
     if not telegram:
         telegram = "@cattien999"
 
