@@ -1,7 +1,7 @@
-Flask
-requests
-gunicorn>=21.2
-python-dotenv
-Pillow
-aiohttp
-openpyxl
+Flask==3.1.2
+requests==2.32.3
+gunicorn==23.0.0
+python-dotenv==1.0.1
+openai==2.6.1
+Pillow==12.0.0
+aiohttp==3.13.2
