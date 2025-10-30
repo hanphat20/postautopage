@@ -284,21 +284,36 @@ INDEX_HTML = r"""<!doctype html>
     const box1 = $('#pages_box'), box2 = $('#post_pages_box');
     const st1  = $('#inbox_pages_status'), st2 = $('#post_pages_status');
     try{
-      const r = await fetch('/api/pages'); const d = await r.json();
+      const r = await fetch('/api/pages'); 
+      const d = await r.json();
       const pages = d.data || [];
-      const html = pages.map(p=>('<label class="checkbox"><input type="checkbox" class="pg-inbox" value="'+p.id+'"> '+(p.name||p.id)+'</label>')).join('');
-      const html2= pages.map(p=>('<label class="checkbox"><input type="checkbox" class="pg-post" value="'+p.id+'"> '+(p.name||p.id)+'</label>')).join('');
-      box1.innerHTML = html; box2.innerHTML = html2;
+      const html = pages.map(p => (
+        '<label class="checkbox"><input type="checkbox" class="pg-inbox" value="'+p.id+'"> '+(p.name||p.id)+'</label>'
+      )).join('');
+      const html2 = pages.map(p => (
+        '<label class="checkbox"><input type="checkbox" class="pg-post" value="'+p.id+'"> '+(p.name||p.id)+'</label>'
+      )).join('');
+      box1.innerHTML = html; 
+      box2.innerHTML = html2;
       st1 && (st1.textContent = 'Tải ' + pages.length + ' page.'); 
       st2 && (st2.textContent = 'Tải ' + pages.length + ' page.');
       // reset master checkboxes
-      const sa1 = $('#inbox_select_all'); const sa2 = $('#post_select_all');
-      if(sa1){ sa1.checked = false; sa1.onchange = () => {
-        const checked = sa1.checked; $all('.pg-inbox').forEach(cb => cb.checked = checked);
-      }; }
-      if(sa2){ sa2.checked = false; sa2.onchange = () => {
-        const checked = sa2.checked; $all('.pg-post').forEach(cb => cb.checked = checked);
-      }; }
+      const sa1 = $('#inbox_select_all'); 
+      const sa2 = $('#post_select_all');
+      if(sa1){ 
+        sa1.checked = false; 
+        sa1.onchange = () => {
+          const checked = sa1.checked; 
+          $all('.pg-inbox').forEach(cb => cb.checked = checked);
+        }; 
+      }
+      if(sa2){ 
+        sa2.checked = false; 
+        sa2.onchange = () => {
+          const checked = sa2.checked; 
+          $all('.pg-post').forEach(cb => cb.checked = checked);
+        }; 
+      }
       // keep master in sync when user toggles individually
       function syncMaster(groupSel, masterSel){
         const allCbs = $all(groupSel);
@@ -310,12 +325,11 @@ INDEX_HTML = r"""<!doctype html>
       }
       syncMaster('.pg-inbox', '#inbox_select_all');
       syncMaster('.pg-post', '#post_select_all');
-
     }catch(e){
       st1 && (st1.textContent='Không tải được danh sách page');
       st2 && (st2.textContent='Không tải được danh sách page');
     }
-  }
+}
 
   function safeSenders(x){
     let senders = '(Không rõ)';
@@ -446,13 +460,18 @@ INDEX_HTML = r"""<!doctype html>
   // Đăng bài
   // AI generate (tận dụng keyword/source đã lưu cho page)
   $('#btn_ai_generate')?.addEventListener('click', async ()=>{
+    const st = $('#post_pages_status');
     const prompt = ($('#ai_prompt')?.value||'').trim();
-    const st = $('#post_status'); const pids = $all('.pg-post:checked').map(i=>i.value);
+    const pids = $all('.pg-post:checked').map(i=>i.value);
     if(!pids.length){ st.textContent='Chọn ít nhất 1 Page'; return; }
-    const page_id = pids[0] || null; // ưu tiên dùng key của page đầu tiên đang chọn
+    const page_id = pids[0] || null; // dùng page đầu tiên đang chọn
     st.textContent='Đang tạo bằng AI...';
     try{
-      const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({page_id, prompt})});
+      const r = await fetch('/api/ai/generate', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({page_id, prompt})
+      });
       const d = await r.json();
       if(d.error){ st.textContent=d.error; return; }
       $('#post_text').value = (d.text||'').trim();
