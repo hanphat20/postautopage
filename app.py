@@ -162,7 +162,26 @@ INDEX_HTML = r"""<!doctype html>
     .right{ text-align:right }
     .sendbar{display:flex;gap:8px;margin-top:8px}
     .sendbar input{flex:1}
-  </style>
+
+  /* Settings layout */
+  .settings-row{
+    display:grid;
+    grid-template-columns: 300px 1fr 1fr; /* Tên page | Keyword | Source */
+    gap:12px;
+    align-items:center;
+  }
+  .settings-name{
+    font-weight:600;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .settings-input{
+    width:100%;
+    min-height:36px;
+    padding:8px 10px;
+    border:1px solid #ddd; border-radius:8px;
+  }
+  #settings_box{ padding:12px; }
+</style>
 </head>
 <body>
   <div class="container">
