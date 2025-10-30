@@ -763,45 +763,102 @@ def api_settings_save():
 
 
 # ------------------------ API: AI generate from settings ------------------------
+@a
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
+    """
+    Generate a support-focused, non-duplicated post using per-page settings:
+    - 2 first lines fixed text but icons randomized
+    - Important content varies per request (randomized variants)
+    - Contact info fixed
+    - Core 6 hashtags fixed pattern with {keyword}
+    - Extended hashtags appended (random sample)
+    """
     js = request.get_json(force=True) or {}
-    page_id = js.get("page_id") or ""
-    prompt = (js.get("prompt") or "").strip()
-
+    page_id = (js.get("page_id") or "").strip()
+    extra_prompt = (js.get("prompt") or "").strip()
     if not page_id:
         return jsonify({"error": "Chưa chọn Page"})
-
     settings = _load_settings()
     conf = settings.get(page_id) or {}
     keyword = (conf.get("keyword") or "").strip()
-    source  = (conf.get("source") or "").strip()
-
-    if not keyword and not source:
-        return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
-
-    lines = []
-    if keyword:
-        lines.append(f"📌 Chủ đề: {keyword}")
-    if source:
-        lines.append(f"🔗 Tham khảo: {source}")
-    if prompt:
-        lines.append("")
-        lines.append(f"Yêu cầu thêm: {prompt}")
-
+    link    = (conf.get("source")  or "").strip()
+    if not keyword:
+        return jsonify({"error": "Page chưa có Từ khoá (keyword) trong Cài đặt"})
+    if not link:
+        return jsonify({"error": "Page chưa có Link nguồn trong Cài đặt"})
+    # icon pools
+    icon_pairs = [
+        ("🌐","🚀"), ("✨","🔐"), ("🌟","🔗"), ("⚡","✅"), ("🔥","📌"), ("💫","🛡️")
+    ]
+    pre1_icon, pre2_icon = random.choice(icon_pairs)
+    # fixed first 2 lines (content fixed, icons can change)
+    line1 = f"{pre1_icon} Truy Cập Link {keyword} Chính Thức – Không Bị Chặn {pre1_icon}"
+    line2 = f"#{keyword} {pre2_icon} {link}"
+    # Important content (rotate variants)
+    variants = [
+        [
+            "**Thông tin quan trọng:**",
+            "- **Nạp & rút nhanh** với đội hỗ trợ 24/7, theo dõi giao dịch đến khi hoàn tất.",
+            "- **Mở khoá tài khoản** nhanh khi bị hạn chế; hướng dẫn xác minh an toàn.",
+            "- **Link chính chủ {kw}**, không qua trung gian — tránh giả mạo/lừa đảo.",
+            "- **Bảo mật nhiều lớp** (mã hoá & xác thực), tuân thủ tiêu chuẩn châu Âu."
+        ],
+        [
+            "**Thông tin quan trọng:**",
+            "- **Xử lý sự cố mất tiền/lỗi giao dịch**: tiếp nhận, điều tra và hoàn tiền khi xác minh.",
+            "- **Rút tiền không thành công**: hỗ trợ kỹ thuật, kiểm tra ví/ngân hàng và khắc phục lỗi.",
+            "- **Đường dẫn dự phòng** giúp truy cập ổn định khi có chặn.",
+            "- **Minh bạch & tuân thủ**: vận hành theo chuẩn châu Âu."
+        ],
+        [
+            "**Thông tin quan trọng:**",
+            "- **Giao diện tối ưu**, tải nhanh trên mọi thiết bị.",
+            "- **CSKH ưu tiên**: phản hồi trong thời gian ngắn, theo sát từng yêu cầu.",
+            "- **Đăng ký/đăng nhập an toàn**, kiểm soát bảo mật linh hoạt.",
+            "- **Tuân thủ pháp lý** và bảo vệ quyền riêng tư người dùng."
+        ]
+    ]
+    content = random.choice(variants)
+    content = [line.replace("{kw}", keyword) for line in content]
+    # contact fixed
+    contact = [
+        "**Thông tin liên hệ hỗ trợ:**",
+        "SDT: **0927395058**",
+        "Telegram: **@cattien999**"
+    ]
+    # hashtags: core 6 fixed, extended random
+    core_tags = [
+        f"#{keyword}", f"#LinkChinhThuc{keyword}", f"#{keyword}AnToan",
+        f"#HoTroLayLaiTien{keyword}", f"#RutTien{keyword}", f"#MoKhoaTaiKhoan{keyword}"
+    ]
+    extended_pool = [
+        f"#DangKy{keyword}", f"#NapRut{keyword}", f"#KhuyenMai{keyword}", f"#CSKH{keyword}",
+        f"#HoTro24h{keyword}", f"#TaiApp{keyword}", f"#TrangChu{keyword}", f"#LinkMoi{keyword}",
+        f"#KhongChan{keyword}", f"#BaoMat{keyword}", f"#ThanhToan{keyword}", f"#UyTin{keyword}",
+        f"#TuVan{keyword}", f"#TheThao{keyword}", f"#Casino{keyword}", f"#Slots{keyword}",
+        f"#GameBai{keyword}", f"#Live{keyword}", f"#VIP{keyword}", f"#KhachHang{keyword}"
+    ]
+    extra_tags = random.sample(extended_pool, k=min(8, len(extended_pool)))
+    lines = [line1, line2, "", 
+             f"Truy cập link chính thức của **{keyword}** để nhận hỗ trợ kịp thời và giao dịch an toàn.",
+            ]
+    lines.extend(content)
     lines.append("")
-    lines.append("———")
-    lines.append(f"{keyword or 'Bài viết'} – tóm tắt ngắn:")
-    lines.append(f"- Giới thiệu nhanh về {keyword.lower() if keyword else 'chủ đề'}")
-    lines.append("- 3 lợi ích chính cho người đọc")
-    lines.append("- Gợi ý hành động (CTA) rõ ràng")
-    if source:
-        lines.append(f"\n➡️ Xem chi tiết: {source}")
-
+    lines.extend(contact)
+    lines.append("")
+    # append hashtags in two lines for readability
+    all_tags = core_tags + extra_tags
+    # Keep without the title "Hashtags"
+    lines.append(" ".join(all_tags[:6]))
+    if len(all_tags) > 6:
+        lines.append(" ".join(all_tags[6:]))
+    # include extra prompt if provided (appends as comment for editor to tweak)
+    if extra_prompt:
+        lines.append("")
+        lines.append(f"<!-- Gợi ý bổ sung: {extra_prompt} -->")
     text = "\n".join(lines).strip()
     return jsonify({"text": text})
-
-
 # ------------------------ Upload (optional for media local) ------------------------
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
