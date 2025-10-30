@@ -1471,8 +1471,6 @@ def reels_finish(page_id: str, page_token: str, video_id: str, description: str)
     return graph_post(f"{page_id}/video_reels", {"upload_phase": "finish", "video_id": video_id, "description": description}, page_token, ctx_key=_ctx_key_for_page(page_id))
 
 
-@app.route("/api/inbox/conversations")
-
 @app.route("/api/inbox/messages")
 def api_inbox_messages():
     token = session.get("user_access_token") or (load_tokens().get("user_long") or {}).get("access_token")
@@ -1726,7 +1724,7 @@ def api_ai_generate():
     phone = (body.get("phone") or "").strip()
     telegram = (body.get("telegram") or "").strip()
     if not phone:
-        phone = "0927395058"
+        phone = "0363169604"
     if not telegram:
         telegram = "@cattien999"
 
