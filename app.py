@@ -441,7 +441,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div class="status" id="pages_status" ></div>
         </div>
         <div class="card" style="margin-top:12px">
-          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="perpage_toggle"/> Dùng nội dung riêng cho từng Page (để trống = dùng nội dung chung)</label>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="perpage_toggle"/> Dùng nội dung riêng cho từng Page</label>
           <div id="perpage_container" class="list" style="display:none"></div>
         </div>
         <div class="card" style="margin-top:12px">
