@@ -502,9 +502,11 @@ INDEX_HTML = r"""<!doctype html>
   loadSettings();
 
   async function loadSettings(){
-    const box = $('#settings_box'); const st = $('#settings_status');
+    const box = $('#settings_box'); 
+    const st = $('#settings_status');
     try{
-      const r = await fetch('/api/settings/get'); const d = await r.json();
+      const r = await fetch('/api/settings/get'); 
+      const d = await r.json();
       const rows = (d.data||[]).map(s => (
         '<div class="settings-row">' +
           '<div class="settings-name">' + (s.name||s.id) + '</div>' +
@@ -514,7 +516,10 @@ INDEX_HTML = r"""<!doctype html>
       )).join('');
       box.innerHTML = rows || '<div class="muted">Không có page.</div>';
       st.textContent = 'Tải ' + (d.data||[]).length + ' page cho cài đặt.';
-    }catch(e){ st.textContent = 'Lỗi tải cài đặt'; }
+    }catch(e){ 
+      st.textContent = 'Lỗi tải cài đặt'; 
+    }
+  }
   }
   $('#btn_settings_save')?.addEventListener('click', async ()=>{
     const items = [];
@@ -522,6 +527,14 @@ INDEX_HTML = r"""<!doctype html>
       const id = inp.getAttribute('data-id');
       const source = document.querySelector('.set-source[data-id="'+id+'"]')?.value || '';
       items.push({id, keyword: inp.value||'', source});
+    });
+    const st = $('#settings_status');
+    try{
+      const r = await fetch('/api/settings/save', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({items})});
+      const d = await r.json();
+      st.textContent = d.ok ? 'Đã lưu.' : (d.error||'Lỗi lưu');
+    }catch(e){ st.textContent = 'Lỗi lưu'; }
+  });
     });
     const st = $('#settings_status');
     try{
