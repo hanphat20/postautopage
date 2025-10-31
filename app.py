@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import time
 import typing as t
@@ -46,6 +47,9 @@ DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+
+# Content filter mode: "soft" (sanitize), "hard" (block), "off" (no filter)
+CONTENT_FILTER_MODE = os.getenv("CONTENT_FILTER_MODE", "soft").lower()
 
 # ✅ CHANGE: use project file by default (persistent across redeploys)
 SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/var/data/page_settings.json')
@@ -867,13 +871,21 @@ def api_ai_generate():
         return lines
 
     # ---------- Policy guard (Facebook-safe) ----------
-    BANNED_WORDS = [
-        "cá cược","đánh bạc","casino","đặt cược","trò đỏ đen","chơi bài","kèo",
-        "tỷ lệ thắng","nhà cái","thua cuộc","ăn tiền","win 100","bắn cá ăn tiền"
-    ]
-    def detect_violation(s: str) -> bool:
-        t = (s or "").lower()
-        return any(w in t for w in BANNED_WORDS)
+SAFE_BRANDS = SAFE_BRANDS  # reuse from top
+SUPPORT_HINTS = ["hỗ trợ","mở khóa","xác minh","liên hệ","hoàn tiền","bảo mật","chống mạo danh","CSKH","khiếu nại"]
+BANNED_WORDS = [
+    "cá cược","đánh bạc","casino","đặt cược","trò đỏ đen","chơi bài","kèo",
+    "tỷ lệ thắng","nhà cái","thua cuộc","ăn tiền","win 100","bắn cá ăn tiền"
+]
+def _is_support_context(s: str) -> bool:
+    t = (s or "").lower()
+    return sum(1 for w in SUPPORT_HINTS if w in t) >= 2
+def detect_violation(s: str, keyword: str = "") -> bool:
+    t = (s or "").lower()
+    # allow if context is support and keyword is a known brand
+    if keyword and keyword.lower() in SAFE_BRANDS and _is_support_context(t):
+        return False
+    return any(w in t for w in BANNED_WORDS)
 
     # ---------- Anti-plag: 3-gram overlap vs. corpus ----------
     CORPUS_PATH = "./generated_corpus.json"
@@ -1169,12 +1181,13 @@ def api_ai_generate():
     final_text = compose_text()
 
     # ====== Policy check (Facebook-safe) ======
-    if detect_violation(final_text):
-        return jsonify({
-            "error": "CONTENT_POLICY_VIOLATION",
-            "detail": "Nội dung chứa cụm từ rủi ro theo chính sách. Vui lòng thử lại/điều chỉnh prompt."
-        }), 400
-
+    # Apply soft sanitize first (before any checks)
+    final_text = fb_safe_sanitize(final_text, keyword)
+    mode = os.getenv("CONTENT_FILTER_MODE", CONTENT_FILTER_MODE).lower()
+    if mode == "hard":
+        if detect_violation(final_text, keyword):
+            return jsonify({"error":"CONTENT_POLICY_VIOLATION",
+                            "detail":"Nội dung chứa cụm từ rủi ro theo chính sách."}), 400
     # ====== Anti-plag loop (auto rewrite if too similar) ======
     MAX_TRIES = 3
     tries = 1
@@ -1206,11 +1219,12 @@ def api_ai_generate():
 
     remember(page_id or "GLOBAL", final_text)
 
+    mode = os.getenv("CONTENT_FILTER_MODE", CONTENT_FILTER_MODE).lower()
     if mode in ("soft","off"):
         final_text = fb_safe_sanitize(final_text, keyword)
     elif mode == "hard":
         try:
-            if detect_violation(final_text):
+            if detect_violation(final_text, keyword):
                 return jsonify({"error":"CONTENT_POLICY_VIOLATION"}), 400
         except Exception:
             pass
