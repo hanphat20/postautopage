@@ -172,9 +172,7 @@ def _load_tokens() -> dict:
         pass
     return {}
 
-
 PAGE_TOKENS = _load_tokens()
-
 
 def get_page_token(page_id: str) -> str:
     token = PAGE_TOKENS.get(page_id, "")
@@ -182,12 +180,10 @@ def get_page_token(page_id: str) -> str:
         raise RuntimeError(f"Không tìm thấy token cho page_id={page_id}")
     return token
 
-
 # ------------------------ Helpers to FB Graph ------------------------
 
 FB_VERSION = "v20.0"
 FB_API = f"https://graph.facebook.com/{FB_VERSION}"
-
 
 def fb_get(path: str, params: dict, timeout: int = 30) -> dict:
     url = f"{FB_API}/{path.lstrip('/')}"
@@ -200,7 +196,6 @@ def fb_get(path: str, params: dict, timeout: int = 30) -> dict:
         raise RuntimeError(f"FB GET {url} failed: {data}")
     return data
 
-
 def fb_post(path: str, data: dict, timeout: int = 30) -> dict:
     url = f"{FB_API}/{path.lstrip('/')}"
     r = session.post(url, data=data, timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT))
@@ -211,7 +206,6 @@ def fb_post(path: str, data: dict, timeout: int = 30) -> dict:
     if r.status_code >= 400 or "error" in js:
         raise RuntimeError(f"FB POST {url} failed: {js}")
     return js
-
 
 # ------------------------ Frontend ------------------------
 
@@ -643,7 +637,6 @@ INDEX_HTML = r"""<!doctype html>
 def index():
     return make_response(INDEX_HTML)
 
-
 # ------------------------ API: Pages ------------------------
 
 @app.route("/api/pages")
@@ -658,11 +651,9 @@ def api_pages():
         pages.append({"id": pid, "name": name})
     return jsonify({"data": pages})
 
-
 # ------------------------ API: Conversations ------------------------
 
 _CONV_CACHE = {}
-
 
 @app.route("/api/inbox/conversations")
 def api_inbox_conversations():
@@ -721,8 +712,6 @@ def api_inbox_conversations():
     except Exception as e:
         return jsonify({"error": str(e)})
 
-
-
 # ------------------------ API: Messages of a conversation ------------------------
 
 @app.route("/api/inbox/messages")
@@ -757,7 +746,6 @@ def api_inbox_messages():
         return jsonify({"data": msgs})
     except Exception as e:
         return jsonify({"error": str(e)})
-
 
 # ------------------------ API: Reply to a conversation ------------------------
 
@@ -816,7 +804,6 @@ def api_inbox_reply():
     except Exception as e:
         return jsonify({"error": str(e)})
 
-
 # ------------------------ Settings (keyword + source per page) ------------------------
 @app.route("/api/settings/get")
 def api_settings_get():
@@ -843,7 +830,6 @@ def api_settings_save():
         data[pid] = {"keyword": it.get("keyword",""), "source": it.get("source","")}
     _save_settings(data)
     return jsonify({"ok": True})
-
 
 # ------------------------ API: AI generate (v2 FULL: FB-safe + anti-plag + icons + hashtags) ------------------------
 @app.route("/api/ai/generate", methods=["POST"])
@@ -884,7 +870,7 @@ def api_ai_generate():
         return lines
 
     # ---------- Policy guard (Facebook-safe) ----------
-SAFE_BRANDS = SAFE_BRANDS  # reuse
+
 SUPPORT_HINTS = ['hỗ trợ','mở khóa','xác minh','liên hệ','hoàn tiền','bảo mật','chống mạo danh','CSKH','khiếu nại']
 BANNED_WORDS = [
   'cá cược','đánh bạc','casino','đặt cược','trò đỏ đen','chơi bài','kèo',
@@ -1254,7 +1240,6 @@ def webhook_events():
     # POST: just acknowledge
     return jsonify({"ok": True})
 
-
 # ------------------------ SSE (dummy) ------------------------
 @app.route("/stream/messages")
 def stream_messages():
@@ -1268,7 +1253,6 @@ def stream_messages():
             yield "data: {}\n\n"
 
     return Response(gen(), mimetype="text/event-stream")
-
 
 # ------------------------ CSV Export/Import Settings ------------------------
 @app.route("/api/settings/export", endpoint="api_settings_export_v2")
@@ -1321,11 +1305,9 @@ def api_settings_import_v2():
     _save_settings(data)
     return jsonify({"ok": True, "updated": count})
 
-
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True)
-
 
 # --- Global JSON error handler ---
 @app.errorhandler(Exception)
