@@ -22,6 +22,10 @@ app.secret_key = SECRET_KEY
 # ✅ CHANGE: use project file by default (persistent across redeploys)
 SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/var/data/page_settings.json')
 
+# OpenAI defaults (can be overridden via Settings or request body)
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '').strip()
+OPENAI_MODEL   = os.getenv('OPENAI_MODEL', 'gpt-4o-mini').strip()
+
 def _load_settings():
     """
     Load page settings JSON. Returns dict.
