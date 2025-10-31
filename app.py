@@ -1205,7 +1205,7 @@ def api_ai_generate():
         tries += 1
 
     remember(page_id or "GLOBAL", final_text)
-            mode = os.getenv("CONTENT_FILTER_MODE","soft").lower()
+
     if mode in ("soft","off"):
         final_text = fb_safe_sanitize(final_text, keyword)
     elif mode == "hard":
