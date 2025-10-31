@@ -763,120 +763,86 @@ def api_settings_save():
 
 
 # ------------------------ API: AI generate from settings ------------------------
-
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
     js = request.get_json(force=True) or {}
     page_id = js.get("page_id") or ""
     prompt = (js.get("prompt") or "").strip()
-    # optional direct keyword/link from body as fallback
-    body_keyword = (js.get("keyword") or "").strip()
-    body_link = (js.get("link") or "").strip()
 
-    if not page_id and not body_keyword:
-        return jsonify({"error": "Chưa chọn Page hoặc thiếu keyword"})
-    # Load settings (may be empty)
+    if not page_id:
+        return jsonify({"error": "Chưa chọn Page"})
+
     settings = _load_settings()
     conf = settings.get(page_id) or {}
-
     keyword = (conf.get("keyword") or "").strip()
     source  = (conf.get("source") or "").strip()
 
-    # Fallback to request body fields if settings are missing
-    if not keyword and body_keyword:
-        keyword = body_keyword
-    if not source and body_link:
-        source = body_link
-
     if not keyword and not source:
-        return jsonify({"error": f"Page {page_id or '(n/a)'} chưa có Từ khoá/Link nguồn trong Cài đặt và body không cung cấp 'keyword'/'link'"})
-    # ------------- content builder -------------
-    import unicodedata, random, re
-    def no_accent(s: str) -> str:
-        return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
-    icons = ["🌟","☀️","💥","🔰","✨","🚀","🔥","🎯","✅","🔒"]
-    i1,i2 = random.sample(icons,2)
-    key_up = (keyword or "").upper()
-    title = f"{i1} Truy Cập Link {key_up or 'CHÍNH THỨC'} – Không Bị Chặn {i2}"
+        return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
 
-    openers = [
-        f"Truy cập đường dẫn chính thức của {keyword} để tránh trang giả mạo và đảm bảo an toàn cho tài khoản của bạn." if keyword else
-        "Truy cập đường dẫn chính thức để tránh trang giả mạo và đảm bảo an toàn cho tài khoản của bạn.",
-        f"Đây là link chính thức của {keyword} — vào nhanh, ổn định và được hỗ trợ 24/7." if keyword else
-        "Đây là link chính thức — vào nhanh, ổn định và được hỗ trợ 24/7.",
-        f"Sử dụng link chuẩn {keyword} để giao dịch mượt mà, bảo mật và hợp pháp." if keyword else
-        "Sử dụng link chuẩn để giao dịch mượt mà, bảo mật và hợp pháp.",
-    ]
-    if prompt:
-        openers.append(f"{prompt} — chúng tôi sẵn sàng hỗ trợ bạn với trải nghiệm an toàn, hợp pháp và bảo mật.")
-    body_text = random.choice(openers)
-
-    bullets_pool = [
-        "Hỗ trợ nạp không lên điểm: kiểm tra giao dịch và xử lý kịp thời.",
-        "Rút tiền không về/bị treo: tiếp nhận ưu tiên và đẩy nhanh xử lý.",
-        "Tài khoản bị khoá: hướng dẫn xác minh để mở khoá an toàn.",
-        "Hỗ trợ lấy lại tiền khi thao tác sai/sai link (nếu đủ điều kiện).",
-        "Khuyến mãi/ưu đãi thành viên được cập nhật thường xuyên.",
-        "Cam kết an toàn – bảo mật – hợp pháp; minh bạch quy trình.",
-        "Giao dịch đúng hướng dẫn: không mất thuế, không phát sinh phí ẩn.",
-    ]
-    bullets = random.sample(bullets_pool, k=min(len(bullets_pool), random.randint(4,6)))
-
-    text_lower = prompt.lower()
-    include_baccarat = any(k in text_lower for k in ["baccarat","bacarat","nổ hũ","no hu","nohu"])
-    baccarat_note = []
-    baccarat_tags = []
-    if include_baccarat:
-        baccarat_note = [
-            "Mẹo tham khảo: quản lý vốn chặt chẽ, đặt giới hạn và dừng khi đạt mục tiêu.",
-            "Ưu tiên nhận diện xu hướng ngắn hạn, tránh cược theo cảm xúc.",
-            "Không có phương pháp hay công cụ nào đảm bảo thắng 100%; hãy chơi có trách nhiệm."
-        ]
-        baccarat_tags = ["#Baccarat","#Bacarat","#NoHu","#ToolBaccarat","#BatCau","#BatCauLongBao"]
-
-    extras = []
+    lines = []
+    if keyword:
+        lines.append(f"📌 Chủ đề: {keyword}")
     if source:
-        extras.append(f"Link truy cập nhanh: {source}")
+        lines.append(f"🔗 Tham khảo: {source}")
     if prompt:
-        extras.append(f"Yêu cầu thêm: {prompt}")
-
-    contact_block = "Thông tin liên hệ hỗ trợ:\nSĐT: 0927395058\nTelegram: @cattien999"
-
-    nospace = (keyword or "").replace(" ", "")
-    nosign  = no_accent(nospace)
-    base_tags = [
-        f"#{keyword}" if keyword else "",
-        f"#LinkChínhThức{nospace}" if nospace else "",
-        f"#{nospace}AnToàn" if nospace else "",
-        f"#HỗTrợLấyLạiTiền{nospace}" if nospace else "",
-        f"#RútTiền{nospace}" if nospace else "",
-        f"#MởKhóaTàiKhoản{nospace}" if nospace else "",
-    ]
-    extra_pool = ["UyTin","BaoMat","KhongBiChan","NapTien","RutTienNhanh","HoTro24h","KhuyenMai","DangKyNhanh","LinkChinhChu","KhachHang","TocDoCao"]
-    extra_tags = [f"#{nosign}{t}" for t in random.sample(extra_pool, k=4 if len(extra_pool)>=4 else len(extra_pool))] if nosign else []
-    tags = " ".join([t for t in (base_tags + extra_tags + baccarat_tags) if t])
-
-    lines = [title, f"#{keyword} ➡ {source}".rstrip() if keyword else (source or ""), "", body_text, "", "Thông tin quan trọng:", ""]
-    for b in bullets: lines.append(f"- {b}")
-    if baccarat_note:
         lines.append("")
-        lines.append("Lưu ý chơi (tham khảo):")
-        for x in baccarat_note: lines.append(f"- {x}")
-    if extras:
-        lines.append("")
-        lines.extend(extras)
-    lines.append("")
-    lines.append(contact_block.replace("\n", "\n").replace("\n","\n"))  # keep literal newlines after join below
-    lines.append("")
-    lines.append("⚠️ Lưu ý: Chơi có trách nhiệm — không có chiến lược hay công cụ nào đảm bảo thắng 100%.")
-    lines.append("")
-    if tags:
-        lines.append("Hashtags:")
-        lines.append(tags)
+        lines.append(f"Yêu cầu thêm: {prompt}")
 
-    text = "\n".join(lines).replace("\n", "
-").strip()
+    lines.append("")
+    lines.append("———")
+    lines.append(f"{keyword or 'Bài viết'} – tóm tắt ngắn:")
+    lines.append(f"- Giới thiệu nhanh về {keyword.lower() if keyword else 'chủ đề'}")
+    lines.append("- 3 lợi ích chính cho người đọc")
+    lines.append("- Gợi ý hành động (CTA) rõ ràng")
+    if source:
+        lines.append(f"\n➡️ Xem chi tiết: {source}")
+
+    text = "
+".join(lines).strip()
     return jsonify({"text": text})
+
+
+# ------------------------ Upload (optional for media local) ------------------------
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    """Simple local upload to /mnt/data and return path for later"""
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error":"Không có file"})
+    base = "/mnt/data"
+    os.makedirs(base, exist_ok=True)
+    save_path = os.path.join(base, f.filename)
+    f.save(save_path)
+    return jsonify({"ok": True, "path": save_path})
+
+
+# ------------------------ API: Post to pages ------------------------
+
+@app.route("/api/pages/post", methods=["POST"])
+def api_pages_post():
+    try:
+        js = request.get_json(force=True) or {}
+        pages: t.List[str] = js.get("pages", [])
+        text_content = (js.get("text") or "").strip()
+        media_url = (js.get("image_url") or js.get("media_url") or "").strip() or None
+        media_path = (js.get("media_path") or "").strip() or None
+        post_type = (js.get("post_type") or "feed").strip()  # feed | reels
+
+        if not pages:
+            return jsonify({"error": "Chọn ít nhất 1 page"})
+        if not text_content and not media_url and not media_path:
+            return jsonify({"error": "Thiếu nội dung hoặc media"})
+
+        results = []
+        for pid in pages:
+            token = get_page_token(pid)
+
+            # Decide media type
+            is_video = False
+            if media_path:
+                lower = media_path.lower()
+                is_video = lower.endswith(('.mp4','.mov','.mkv','.avi','.webm'))
             elif media_url:
                 lower = media_url.lower()
                 is_video = any(ext in lower for ext in ['.mp4','.mov','.mkv','.avi','.webm'])
@@ -1002,9 +968,3 @@ def api_settings_import_v2():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True)
-
-@app.route("/api/settings/debug")
-def api_settings_debug():
-    pid = request.args.get("page_id","")
-    data = _load_settings()
-    return jsonify({"page_id": pid, "stored": data.get(pid), "all_ids": list(data.keys())})
