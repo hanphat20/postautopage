@@ -48,8 +48,21 @@ DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
-# Content filter mode: "soft" (sanitize), "hard" (block), "off" (no filter)
-CONTENT_FILTER_MODE = os.getenv("CONTENT_FILTER_MODE", "soft").lower()
+# --- Build/version markers & health endpoints ---
+APP_BUILD_TAG = 'FIX_AKUTA_2025_10_31_02'
+
+@app.get('/_version')
+def _version():
+    from flask import jsonify
+    import os
+    return jsonify({'ok': True,'build': APP_BUILD_TAG,'filter_mode': os.getenv('CONTENT_FILTER_MODE','soft')})
+
+@app.get('/_health')
+def _health():
+    return 'ok:' + APP_BUILD_TAG, 200
+
+# Content filter mode: soft (sanitize), hard (block), off (no filter)
+CONTENT_FILTER_MODE = os.getenv('CONTENT_FILTER_MODE', 'soft').lower()
 
 # ✅ CHANGE: use project file by default (persistent across redeploys)
 SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/var/data/page_settings.json')
@@ -871,23 +884,21 @@ def api_ai_generate():
         return lines
 
     # ---------- Policy guard (Facebook-safe) ----------
-SAFE_BRANDS = SAFE_BRANDS  # reuse from top
-SUPPORT_HINTS = ["hỗ trợ","mở khóa","xác minh","liên hệ","hoàn tiền","bảo mật","chống mạo danh","CSKH","khiếu nại"]
+SAFE_BRANDS = SAFE_BRANDS  # reuse
+SUPPORT_HINTS = ['hỗ trợ','mở khóa','xác minh','liên hệ','hoàn tiền','bảo mật','chống mạo danh','CSKH','khiếu nại']
 BANNED_WORDS = [
-    "cá cược","đánh bạc","casino","đặt cược","trò đỏ đen","chơi bài","kèo",
-    "tỷ lệ thắng","nhà cái","thua cuộc","ăn tiền","win 100","bắn cá ăn tiền"
+  'cá cược','đánh bạc','casino','đặt cược','trò đỏ đen','chơi bài','kèo',
+  'tỷ lệ thắng','nhà cái','thua cuộc','ăn tiền','win 100','bắn cá ăn tiền'
 ]
-def _is_support_context(s: str) -> bool:
-    t = (s or "").lower()
+def _is_support_ctx(s: str) -> bool:
+    t = (s or '').lower()
     return sum(1 for w in SUPPORT_HINTS if w in t) >= 2
-def detect_violation(s: str, keyword: str = "") -> bool:
-    t = (s or "").lower()
-    # allow if context is support and keyword is a known brand
-    if keyword and keyword.lower() in SAFE_BRANDS and _is_support_context(t):
+def detect_violation(s: str, keyword: str = '') -> bool:
+    t = (s or '').lower()
+    if keyword and keyword.lower() in SAFE_BRANDS and _is_support_ctx(t):
         return False
     return any(w in t for w in BANNED_WORDS)
-
-    # ---------- Anti-plag: 3-gram overlap vs. corpus ----------
+# ---------- Anti-plag: 3-gram overlap vs. corpus ----------
     CORPUS_PATH = "./generated_corpus.json"
     def _tokenize(s: str) -> list:
         s = (s or "").lower()
@@ -1181,13 +1192,13 @@ def detect_violation(s: str, keyword: str = "") -> bool:
     final_text = compose_text()
 
     # ====== Policy check (Facebook-safe) ======
-    # Apply soft sanitize first (before any checks)
+    # Apply soft sanitize first
     final_text = fb_safe_sanitize(final_text, keyword)
-    mode = os.getenv("CONTENT_FILTER_MODE", CONTENT_FILTER_MODE).lower()
-    if mode == "hard":
+    mode = os.getenv('CONTENT_FILTER_MODE', CONTENT_FILTER_MODE).lower()
+    if mode == 'hard':
         if detect_violation(final_text, keyword):
-            return jsonify({"error":"CONTENT_POLICY_VIOLATION",
-                            "detail":"Nội dung chứa cụm từ rủi ro theo chính sách."}), 400
+            return jsonify({'error':'CONTENT_POLICY_VIOLATION','detail':'Nội dung chứa cụm từ rủi ro theo chính sách.'}), 400
+
     # ====== Anti-plag loop (auto rewrite if too similar) ======
     MAX_TRIES = 3
     tries = 1
@@ -1217,18 +1228,18 @@ def detect_violation(s: str, keyword: str = "") -> bool:
             }), 400
         tries += 1
 
-    remember(page_id or "GLOBAL", final_text)
+    remember(page_id or 'GLOBAL', final_text)
 
-    mode = os.getenv("CONTENT_FILTER_MODE", CONTENT_FILTER_MODE).lower()
-    if mode in ("soft","off"):
+    mode = os.getenv('CONTENT_FILTER_MODE', CONTENT_FILTER_MODE).lower()
+    if mode in ('soft','off'):
         final_text = fb_safe_sanitize(final_text, keyword)
-    elif mode == "hard":
+    elif mode == 'hard':
         try:
             if detect_violation(final_text, keyword):
-                return jsonify({"error":"CONTENT_POLICY_VIOLATION"}), 400
+                return jsonify({'error':'CONTENT_POLICY_VIOLATION'}), 400
         except Exception:
             pass
-    return jsonify({"text": final_text, "filter_mode": mode}), 200
+    return jsonify({'text': final_text, 'filter_mode': mode}), 200
 
 # ------------------------ Minimal webhook endpoints (optional) ------------------------
 @app.route("/webhook/events", methods=["GET","POST"])
@@ -1314,3 +1325,11 @@ def api_settings_import_v2():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True)
+
+
+# --- Global JSON error handler ---
+@app.errorhandler(Exception)
+def _err(e):
+    import traceback
+    from flask import jsonify
+    return jsonify({'error':'SERVER_ERROR','detail':str(e),'trace':traceback.format_exc()[-1200:]}), 500
