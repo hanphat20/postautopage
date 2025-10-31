@@ -20,20 +20,35 @@ app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
 # ✅ CHANGE: use project file by default (persistent across redeploys)
-SETTINGS_FILE = os.getenv('SETTINGS_FILE', 'page_settings.json')
+SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/var/data/page_settings.json')
 
 def _load_settings():
     """
-    Load page settings. If the settings file is missing, try to create it
-    from a local settings.csv (headers: id,name,keyword,source).
+    Load page settings JSON. Returns dict.
+    On first run, if JSON missing and settings.csv exists, bootstrap from CSV.
     """
-    # Prefer reading the JSON file
     try:
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
-        pass
+    except FileNotFoundError:
+        pass  # Will try CSV bootstrap below
 
+    data = {}
+    if os.path.exists('settings.csv'):
+        with open('settings.csv', newline='', encoding='utf-8') as f:
+            rdr = csv.DictReader(f)
+            for row in rdr:
+                pid = (row.get('id') or '').strip()
+                if not pid:
+                    continue
+                data[pid] = {
+                    "keyword": (row.get('keyword') or row.get('keywords') or '').strip(),
+                    "source":  (row.get('source')  or row.get('link')     or '').strip(),
+                }
+        _save_settings(data)
+        return data
+
+    return {}
     # Auto-init from CSV (optional)
     try:
         if os.path.exists('settings.csv'):
@@ -55,13 +70,16 @@ def _load_settings():
 
     return {}
 
-def _save_settings(data: dict):
-    try:
-        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+def _ensure_dir_for(path: str):
+    d = os.path.dirname(path)
+    if d and not os.path.exists(d):
+        os.makedirs(d, exist_ok=True)
 
+def _save_settings(data: dict):
+    """Persist settings to disk. Raise exceptions to surface real errors."""
+    _ensure_dir_for(SETTINGS_FILE)
+    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 FB_CONNECT_TIMEOUT = float(os.getenv("FB_CONNECT_TIMEOUT", "5"))
 FB_READ_TIMEOUT    = float(os.getenv("FB_READ_TIMEOUT", "45"))
 FB_RETRIES         = int(os.getenv("FB_RETRIES", "3"))
@@ -781,121 +799,115 @@ def api_settings_save():
 # ------------------------ API: AI generate from settings ------------------------
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
-    """
-    Sinh bài viết theo cấu trúc:
-    1) Tiêu đề link chính thức (icon luân phiên, ngôn từ biến đổi)
-    2) Nội dung linh hoạt không trùng lặp: hỗ trợ nạp/rút/khóa tài khoản/lấy lại tiền/khuyến mãi/sai link…,
-       cam kết an toàn – bảo mật – hợp pháp – không mất thuế
-    3) Thông tin liên hệ cố định
-    4) Hashtag cố định + mở rộng theo từ khoá
-    """
-    import random, unicodedata
-
     js = request.get_json(force=True) or {}
     page_id = js.get("page_id") or ""
-    extra_prompt = (js.get("prompt") or "").strip()
-
+    prompt = (js.get("prompt") or "").strip()
     if not page_id:
         return jsonify({"error": "Chưa chọn Page"})
-
     settings = _load_settings()
     conf = settings.get(page_id) or {}
-    keyword = (conf.get("keyword") or "").strip()  # ví dụ: MB66, QQ88...
-    source  = (conf.get("source")  or "").strip()
-
+    keyword = (conf.get("keyword") or "").strip()
+    source  = (conf.get("source") or "").strip()
     if not keyword and not source:
         return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
-
-    # ----- helpers -----
-    def no_accent(s):
+    # helpers
+    import unicodedata, random, re
+    def no_accent(s: str) -> str:
         return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
-
-    def pick(arr, k=1):
-        arr = list(arr)
-        random.shuffle(arr)
-        if k == 1:
-            return arr[0]
-        return arr[:k]
-
-    brand = keyword.strip()
-    brand_upper = brand.upper()
-    brand_slug = no_accent(brand).replace(" ", "")
-
-    # 1) Tiêu đề
+    def sanitize_lines(text: str) -> list:
+        lines = []
+        for l in text.splitlines():
+            l = l.strip()
+            if not l: continue
+            l = re.sub(r'^[\\-\\u2022•▹]+', '', l).strip()
+            if l and l not in lines:
+                lines.append(l)
+        return lines
+    # Title
     icons = ["🌟","☀️","💥","🔰","✨","🚀","🔥","🎯","✅","🔒"]
-    title_patterns = [
-        "{i1} Truy cập Link {brand} Chính Thức – Không Bị Chặn {i2}",
-        "{i1} Link {brand} Chính Thức | An Toàn – Hợp Pháp {i2}",
-        "{i1} {brand} – Cổng Truy Cập Chính Chủ, Không Lo Chặn {i2}",
-        "{i1} {brand} Official Link · Ổn Định – Bảo Mật {i2}",
-        "{i1} Truy Cập {brand} Nhanh • Không Mất Thuế • Uy Tín {i2}",
-    ]
-    i1, i2 = pick(icons, 2)
-    title = random.choice(title_patterns).format(i1=i1, i2=i2, brand=brand_upper)
-
-    # 2) Nội dung linh hoạt
+    i1,i2 = random.sample(icons, 2)
+    key_up = (keyword or "").upper()
+    title = f"{i1} Truy Cập Link {key_up or 'CHÍNH THỨC'} – Không Bị Chặn {i2}"
+    # Body (supportive & assertive). If user provides prompt, weave it in.
     openers = [
-        f"Truy cập vào đường dẫn chính thức của {brand} để tránh các trang giả mạo hoặc link bị chặn.",
-        f"Đây là cổng truy cập {brand} đã kiểm duyệt, đảm bảo vào nhanh – ổn định – không bị chặn.",
-        f"Sử dụng link chuẩn của {brand} để giao dịch mượt mà và bảo vệ tài khoản của bạn.",
+        f"Truy cập đường dẫn chính thức của {keyword} để tránh trang giả mạo và đảm bảo an toàn cho tài khoản của bạn." if keyword else
+        "Truy cập đường dẫn chính thức để tránh trang giả mạo và đảm bảo an toàn cho tài khoản của bạn.",
+        f"Đây là link chính thức của {keyword} — vào nhanh, ổn định và được hỗ trợ 24/7." if keyword else
+        "Đây là link chính thức — vào nhanh, ổn định và được hỗ trợ 24/7.",
+        f"Sử dụng link chuẩn {keyword} để giao dịch mượt mà, bảo mật và hợp pháp." if keyword else
+        "Sử dụng link chuẩn để giao dịch mượt mà, bảo mật và hợp pháp."
     ]
+    if prompt:
+        openers.append(f"{prompt} — chúng tôi sẵn sàng hỗ trợ bạn với trải nghiệm an toàn, hợp pháp và bảo mật.")
+    body_text = random.choice(openers)
+    # Important bullets
     bullets_pool = [
-        "Hỗ trợ **nạp không lên điểm**: kiểm tra giao dịch và cộng điểm ngay khi xác minh.",
-        "Xử lý **rút tiền không về** hoặc bị treo: ưu tiên kiểm tra và đẩy nhanh lệnh rút.",
-        "Giải quyết **tài khoản bị khoá**: xác minh danh tính và mở khoá an toàn.",
-        "Hỗ trợ **lấy lại tiền** trong trường hợp thao tác sai hoặc nhầm link.",
-        "Sai link/nhập nhầm địa chỉ: đội ngũ sẽ **truy vết giao dịch** và hỗ trợ hoàn tiền nếu đủ điều kiện.",
-        "Cập nhật **khuyến mãi** và ưu đãi hội viên theo ngày/tuần.",
-        "Cam kết **bảo mật – hợp pháp**; quy trình tuân thủ, an toàn khi giao dịch.",
-        "**Không mất thuế** khi nạp rút theo đúng hướng dẫn chính thức.",
-        "Hỗ trợ 24/7 qua nhiều kênh, tiếp nhận và xử lý **mọi sự cố tài khoản**.",
+        "Hỗ trợ nạp không lên điểm: kiểm tra giao dịch và xử lý kịp thời.",
+        "Rút tiền không về/bị treo: tiếp nhận ưu tiên và đẩy nhanh xử lý.",
+        "Tài khoản bị khoá: hướng dẫn xác minh để mở khoá an toàn.",
+        "Hỗ trợ lấy lại tiền khi thao tác sai/sai link (nếu đủ điều kiện).",
+        "Khuyến mãi/ưu đãi thành viên được cập nhật thường xuyên.",
+        "Cam kết an toàn – bảo mật – hợp pháp; minh bạch quy trình.",
+        "Giao dịch đúng hướng dẫn: không mất thuế, không phát sinh phí ẩn."
     ]
-    n_pick = random.randint(5,7)
-    bullets = pick(bullets_pool, n_pick)
-
-    more_lines = []
+    bullets = random.sample(bullets_pool, k=random.randint(4,6))
+    # Baccarat / nổ hũ (optional, if prompt mentions)
+    text_lower = prompt.lower()
+    include_baccarat = any(k in text_lower for k in ["baccarat", "bacarat", "nổ hũ", "no hu", "nohu"])
+    baccarat_note = []
+    baccarat_tags = []
+    if include_baccarat:
+        baccarat_note = [
+            "Mẹo tham khảo: quản lý vốn chặt chẽ, đặt giới hạn và dừng khi đạt mục tiêu.",
+            "Ưu tiên nhận diện xu hướng ngắn hạn, tránh cược theo cảm xúc.",
+            "Không có phương pháp hay công cụ nào đảm bảo thắng 100%; hãy chơi có trách nhiệm."
+        ]
+        baccarat_tags = ["#Baccarat","#Bacarat","#NoHu","#ToolBaccarat","#BatCau","#BatCauLongBao"]
+    # source/prompt lines
+    extras = []
     if source:
-        more_lines.append(f"Link truy cập nhanh: {source}")
-    if extra_prompt:
-        more_lines.append(f"Yêu cầu thêm: {extra_prompt}")
-
-    # 3) Liên hệ cố định
+        extras.append(f"Link truy cập nhanh: {source}")
+    if prompt:
+        extras.append(f"Yêu cầu thêm: {prompt}")
+    # Contact
     contact_block = "Thông tin liên hệ hỗ trợ:\\nSĐT: 0927395058\\nTelegram: @cattien999"
-
-    # 4) Hashtags
+    # Hashtags
+    nospace = (keyword or "").replace(" ", "")
+    nosign  = no_accent(nospace)
     base_tags = [
-        f"#{brand_slug}", f"#LinkChínhThức{brand_slug}", f"#{brand_slug}AnToàn",
-        f"#HỗTrợLấyLạiTiền{brand_slug}", f"#RútTiền{brand_slug}", f"#MởKhóaTàiKhoản{brand_slug}"
+        f"#{keyword}" if keyword else "",
+        f"#LinkChínhThức{nospace}" if nospace else "",
+        f"#{nospace}AnToàn" if nospace else "",
+        f"#HỗTrợLấyLạiTiền{nospace}" if nospace else "",
+        f"#RútTiền{nospace}" if nospace else "",
+        f"#MởKhóaTàiKhoản{nospace}" if nospace else "",
     ]
-    extra_tags_pool = [
-        "UyTin","BaoMat","KhongBiChan","NapTien","RutTienNhanh","HoTro24h",
-        "KhuyenMai","DangKyNhanh","ChuyenGiaHoTro","KhachHang","LinkChinhChu",
-        "CongGame","TheThao","Casino","KhuyenMaiHomNay"
-    ]
-    extra = [f"#{brand_slug}{t}" for t in pick(extra_tags_pool, random.randint(4,6))]
-    hashtags = " ".join(base_tags + extra)
-
+    extra_pool = ["UyTin","BaoMat","KhongBiChan","NapTien","RutTienNhanh","HoTro24h","KhuyenMai","DangKyNhanh","LinkChinhChu","KhachHang","TocDoCao"]
+    extra_tags = [f"#{nosign}{t}" for t in random.sample(extra_pool, k=4 if len(extra_pool)>=4 else len(extra_pool))] if nosign else []
+    tags = " ".join([t for t in (base_tags + extra_tags + baccarat_tags) if t])
     # Assemble
-    lines = [title, ""]
-    lines.append(random.choice(openers))
-    lines.append("")
-    lines.append("Thông tin quan trọng:")
+    lines = [title, f"#{keyword} ➡ {source}".rstrip() if keyword else (source or ""), "", body_text, "", "Thông tin quan trọng:", ""]
     for b in bullets:
-        lines.append(f"{random.choice(['•','-','▹'])} {b}")
-    if more_lines:
+        lines.append(f"- {b}")
+    if baccarat_note:
         lines.append("")
-        lines += more_lines
-
+        lines.append("Lưu ý chơi (tham khảo):")
+        for x in baccarat_note:
+            lines.append(f"- {x}")
+    if extras:
+        lines.append("")
+        lines.extend(extras)
     lines.append("")
-    lines.append(contact_block)
+    lines.append(contact_block.replace("\\n", "\n"))
     lines.append("")
-    lines.append(hashtags)
-
-    text = "\\n".join(lines).strip()
+    lines.append("⚠️ Lưu ý: Chơi có trách nhiệm — không có chiến lược hay công cụ nào đảm bảo thắng 100%.")
+    lines.append("")
+    if tags:
+        lines.append("Hashtags:")
+        lines.append(tags)
+    text = "\n".join(lines).strip()
     return jsonify({"text": text})
 
-
-# ------------------------ Upload (optional for media local) ------------------------
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     """Simple local upload to /mnt/data and return path for later"""
