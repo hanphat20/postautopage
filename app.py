@@ -2,6 +2,7 @@ import json
 import os
 import time
 import typing as t
+import csv
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -18,15 +19,41 @@ DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
-
-SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/mnt/data/page_settings.json')
+# ✅ CHANGE: use project file by default (persistent across redeploys)
+SETTINGS_FILE = os.getenv('SETTINGS_FILE', 'page_settings.json')
 
 def _load_settings():
+    """
+    Load page settings. If the settings file is missing, try to create it
+    from a local settings.csv (headers: id,name,keyword,source).
+    """
+    # Prefer reading the JSON file
     try:
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception:
-        return {}
+        pass
+
+    # Auto-init from CSV (optional)
+    try:
+        if os.path.exists('settings.csv'):
+            data = {}
+            with open('settings.csv', newline='', encoding='utf-8') as f:
+                rdr = csv.DictReader(f)
+                for row in rdr:
+                    pid = (row.get('id') or '').strip()
+                    if not pid:
+                        continue
+                    data[pid] = {
+                        'keyword': (row.get('keyword') or row.get('tukhoa') or '').strip(),
+                        'source':  (row.get('source')  or row.get('link')   or '').strip(),
+                    }
+            _save_settings(data)
+            return data
+    except Exception:
+        pass
+
+    return {}
 
 def _save_settings(data: dict):
     try:
@@ -345,13 +372,7 @@ INDEX_HTML = r"""<!doctype html>
       // chuẩn hoá link facebook
       let openLink = x.link || '';
       if (openLink && openLink.startsWith('/')) { openLink = 'https://facebook.com' + openLink; }
-      return '<div class="conv-item" data-idx="'+i+'">\
-        <div>\
-          <div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>\
-          <div class="conv-meta">'+(x.snippet||'')+'</div>\
-        </div>\
-        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(openLink?('<div style="margin-top:4px"><a target="_blank" href="'+openLink+'">Mở trên Facebook</a></div>'):'')+'</div>\
-      </div>';
+      return '<div class="conv-item" data-idx="'+i+'">        <div>          <div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>          <div class="conv-meta">'+(x.snippet||'')+'</div>        </div>        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(openLink?('<div style="margin-top:4px"><a target="_blank" href="'+openLink+'">Mở trên Facebook</a></div>'):'')+'</div>      </div>';
     }).join('') || '<div class="muted">Không có hội thoại.</div>';
     st && (st.textContent = 'Tải ' + items.length + ' hội thoại.');
     const totalUnread = items.reduce((a,b)=>a+(b.unread_count||0),0);
@@ -396,12 +417,7 @@ INDEX_HTML = r"""<!doctype html>
         const who  = (m.from && m.from.name) ? m.from.name : '';
         const time = m.created_time ? new Date(m.created_time).toLocaleString('vi-VN') : '';
         const side = m.is_page ? 'right' : 'left';
-        return '<div style="display:flex;justify-content:'+(side==='right'?'flex-end':'flex-start')+';margin:6px 0">\
-          <div class="bubble '+(side==='right'?'right':'')+'">\
-            <div class="meta">'+(who||'')+(time?(' · '+time):'')+'</div>\
-            <div>'+(m.message||'(media)')+'</div>\
-          </div>\
-        </div>';
+        return '<div style="display:flex;justify-content:'+(side==='right'?'flex-end':'flex-start')+';margin:6px 0">          <div class="bubble '+(side==='right'?'right':'')+'">            <div class="meta">'+(who||'')+(time?(' · '+time):'')+'</div>            <div>'+(m.message||'(media)')+'</div>          </div>        </div>';
       }).join('');
       box.scrollTop = box.scrollHeight;
       st && (st.textContent = 'Tải ' + msgs.length + ' tin nhắn');
@@ -765,41 +781,117 @@ def api_settings_save():
 # ------------------------ API: AI generate from settings ------------------------
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
+    """
+    Sinh bài viết theo cấu trúc:
+    1) Tiêu đề link chính thức (icon luân phiên, ngôn từ biến đổi)
+    2) Nội dung linh hoạt không trùng lặp: hỗ trợ nạp/rút/khóa tài khoản/lấy lại tiền/khuyến mãi/sai link…,
+       cam kết an toàn – bảo mật – hợp pháp – không mất thuế
+    3) Thông tin liên hệ cố định
+    4) Hashtag cố định + mở rộng theo từ khoá
+    """
+    import random, unicodedata
+
     js = request.get_json(force=True) or {}
     page_id = js.get("page_id") or ""
-    prompt = (js.get("prompt") or "").strip()
+    extra_prompt = (js.get("prompt") or "").strip()
 
     if not page_id:
         return jsonify({"error": "Chưa chọn Page"})
 
     settings = _load_settings()
     conf = settings.get(page_id) or {}
-    keyword = (conf.get("keyword") or "").strip()
-    source  = (conf.get("source") or "").strip()
+    keyword = (conf.get("keyword") or "").strip()  # ví dụ: MB66, QQ88...
+    source  = (conf.get("source")  or "").strip()
 
     if not keyword and not source:
         return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
 
-    lines = []
-    if keyword:
-        lines.append(f"📌 Chủ đề: {keyword}")
+    # ----- helpers -----
+    def no_accent(s):
+        return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+
+    def pick(arr, k=1):
+        arr = list(arr)
+        random.shuffle(arr)
+        if k == 1:
+            return arr[0]
+        return arr[:k]
+
+    brand = keyword.strip()
+    brand_upper = brand.upper()
+    brand_slug = no_accent(brand).replace(" ", "")
+
+    # 1) Tiêu đề
+    icons = ["🌟","☀️","💥","🔰","✨","🚀","🔥","🎯","✅","🔒"]
+    title_patterns = [
+        "{i1} Truy cập Link {brand} Chính Thức – Không Bị Chặn {i2}",
+        "{i1} Link {brand} Chính Thức | An Toàn – Hợp Pháp {i2}",
+        "{i1} {brand} – Cổng Truy Cập Chính Chủ, Không Lo Chặn {i2}",
+        "{i1} {brand} Official Link · Ổn Định – Bảo Mật {i2}",
+        "{i1} Truy Cập {brand} Nhanh • Không Mất Thuế • Uy Tín {i2}",
+    ]
+    i1, i2 = pick(icons, 2)
+    title = random.choice(title_patterns).format(i1=i1, i2=i2, brand=brand_upper)
+
+    # 2) Nội dung linh hoạt
+    openers = [
+        f"Truy cập vào đường dẫn chính thức của {brand} để tránh các trang giả mạo hoặc link bị chặn.",
+        f"Đây là cổng truy cập {brand} đã kiểm duyệt, đảm bảo vào nhanh – ổn định – không bị chặn.",
+        f"Sử dụng link chuẩn của {brand} để giao dịch mượt mà và bảo vệ tài khoản của bạn.",
+    ]
+    bullets_pool = [
+        "Hỗ trợ **nạp không lên điểm**: kiểm tra giao dịch và cộng điểm ngay khi xác minh.",
+        "Xử lý **rút tiền không về** hoặc bị treo: ưu tiên kiểm tra và đẩy nhanh lệnh rút.",
+        "Giải quyết **tài khoản bị khoá**: xác minh danh tính và mở khoá an toàn.",
+        "Hỗ trợ **lấy lại tiền** trong trường hợp thao tác sai hoặc nhầm link.",
+        "Sai link/nhập nhầm địa chỉ: đội ngũ sẽ **truy vết giao dịch** và hỗ trợ hoàn tiền nếu đủ điều kiện.",
+        "Cập nhật **khuyến mãi** và ưu đãi hội viên theo ngày/tuần.",
+        "Cam kết **bảo mật – hợp pháp**; quy trình tuân thủ, an toàn khi giao dịch.",
+        "**Không mất thuế** khi nạp rút theo đúng hướng dẫn chính thức.",
+        "Hỗ trợ 24/7 qua nhiều kênh, tiếp nhận và xử lý **mọi sự cố tài khoản**.",
+    ]
+    n_pick = random.randint(5,7)
+    bullets = pick(bullets_pool, n_pick)
+
+    more_lines = []
     if source:
-        lines.append(f"🔗 Tham khảo: {source}")
-    if prompt:
+        more_lines.append(f"Link truy cập nhanh: {source}")
+    if extra_prompt:
+        more_lines.append(f"Yêu cầu thêm: {extra_prompt}")
+
+    # 3) Liên hệ cố định
+    contact_block = "Thông tin liên hệ hỗ trợ:\\nSĐT: 0927395058\\nTelegram: @cattien999"
+
+    # 4) Hashtags
+    base_tags = [
+        f"#{brand_slug}", f"#LinkChínhThức{brand_slug}", f"#{brand_slug}AnToàn",
+        f"#HỗTrợLấyLạiTiền{brand_slug}", f"#RútTiền{brand_slug}", f"#MởKhóaTàiKhoản{brand_slug}"
+    ]
+    extra_tags_pool = [
+        "UyTin","BaoMat","KhongBiChan","NapTien","RutTienNhanh","HoTro24h",
+        "KhuyenMai","DangKyNhanh","ChuyenGiaHoTro","KhachHang","LinkChinhChu",
+        "CongGame","TheThao","Casino","KhuyenMaiHomNay"
+    ]
+    extra = [f"#{brand_slug}{t}" for t in pick(extra_tags_pool, random.randint(4,6))]
+    hashtags = " ".join(base_tags + extra)
+
+    # Assemble
+    lines = [title, ""]
+    lines.append(random.choice(openers))
+    lines.append("")
+    lines.append("Thông tin quan trọng:")
+    for b in bullets:
+        lines.append(f"{random.choice(['•','-','▹'])} {b}")
+    if more_lines:
         lines.append("")
-        lines.append(f"Yêu cầu thêm: {prompt}")
+        lines += more_lines
 
     lines.append("")
-    lines.append("———")
-    lines.append(f"{keyword or 'Bài viết'} – tóm tắt ngắn:")
-    lines.append(f"- Giới thiệu nhanh về {keyword.lower() if keyword else 'chủ đề'}")
-    lines.append("- 3 lợi ích chính cho người đọc")
-    lines.append("- Gợi ý hành động (CTA) rõ ràng")
-    if source:
-        lines.append(f"\n➡️ Xem chi tiết: {source}")
+    lines.append(contact_block)
+    lines.append("")
+    lines.append(hashtags)
 
-    text = "
-".join(lines).strip()
+    text = "\\n".join(lines).strip()
     return jsonify({"text": text})
 
 
