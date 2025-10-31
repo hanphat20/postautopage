@@ -852,14 +852,14 @@ def api_ai_generate():
         s = re.sub(r"\s+", " ", s).strip()
         return s.split()
 
-    def _shingles(tokens: list, n: int = 3) -> Counter:
-        return Counter([" ".join(tokens[i:i+n]) for i in range(max(0, len(tokens)-n+1))])
+    def _shingles(tokens: list, n: int = 3):
+        return [" ".join(tokens[i:i+n]) for i in range(max(0, len(tokens)-n+1))]
 
     def _ngram_overlap(a: str, b: str, n: int = 3) -> float:
         ta, tb = _tokenize(a), _tokenize(b)
         if not ta or not tb:
             return 0.0
-        sa, sb = set(_shingles(ta, n).keys()), set(_shingles(tb, n).keys())
+        sa, sb = set(_shingles(ta, n)), set(_shingles(tb, n))
         if not sa or not sb:
             return 0.0
         inter = len(sa & sb)
@@ -907,14 +907,15 @@ def api_ai_generate():
         s = (s or "")
         s = re.sub(r"https?://\S+", " ", s)
         s = unicodedata.normalize("NFD", s)
-        s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")  # strip accents
+        s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
         s = re.sub(r"[^A-Za-z0-9\s]", " ", s)
         s = re.sub(r"\s+", " ", s).strip().lower()
         return s.split()
 
     def camel_hashtag(phrase: str) -> str:
         words = [w for w in tok_words(phrase) if len(w) > 2 and w not in VI_EN_STOP]
-        if not words: return ""
+        if not words: 
+            return ""
         cap = "".join(w.capitalize() for w in words[:5])[:40]
         return f"#{cap}" if cap else ""
 
@@ -928,25 +929,32 @@ def api_ai_generate():
     link    = safe_url(data_in.get("link") or "")
     include_baccarat = bool(data_in.get("include_baccarat_tips"))
 
-    # Settings fallback
+    # ----- OpenAI key/model: ưu tiên body -> settings -> env global -----
+    body_key   = (data_in.get("openai_api_key") or "").strip()
+    body_model = (data_in.get("openai_model") or "").strip()
     settings = _load_settings() if page_id else {}
     conf = settings.get(page_id, {}) if isinstance(settings, dict) else {}
+    api_key = body_key or (conf.get("openai_api_key") or "").strip() or OPENAI_API_KEY
+    model   = body_model or (conf.get("openai_model") or "").strip()   or OPENAI_MODEL
+
+    # Fallback keyword/link từ Cài đặt nếu thiếu
     if not keyword:
         keyword = (conf.get("keyword") or "").strip()
     if not link:
         link = safe_url(conf.get("source") or "")
+
     contact_phone = (data_in.get("contact_phone") or conf.get("contact_phone") or "").strip()
     contact_tg    = (data_in.get("contact_tele")  or conf.get("contact_tele")  or "").strip()
     method_url    = (data_in.get("method_url")    or conf.get("method_url")    or "").strip() \
                     or "https://sites.google.com/view/toolbacarat-nohu/"
 
+    if not api_key:
+        return jsonify({"error": "NO_OPENAI_API_KEY",
+                        "detail": "Thiếu OPENAI_API_KEY (env/body/settings)."}), 400
     if not keyword and not link:
         return jsonify({"error": "Thiếu keyword/link (hoặc chưa cấu hình trong Cài đặt)"}), 400
 
     # ====== Prompting (body + bullets) ======
-    if not OPENAI_API_KEY:
-        return jsonify({"error": "NO_OPENAI_API_KEY"}), 400
-
     if not prompt:
         prompt = (
             f"Viết thân bài hỗ trợ khách hàng cho {keyword}: nạp – rút nhanh, khuyến mãi hội viên, "
@@ -961,7 +969,6 @@ def api_ai_generate():
         f"Độ dài: {length}. "
         "Chỉ tạo NỘI DUNG THÂN BÀI (60–140 từ) và mục 'Thông tin quan trọng' (gạch đầu dòng). "
         "KHÔNG viết tiêu đề, KHÔNG hashtag, KHÔNG thông tin liên hệ, KHÔNG chèn link.\n"
-        # Anti-plag nội bộ mô tả
         "Tuyệt đối KHÔNG sao chép văn bản từ nguồn bên ngoài. Phải diễn đạt lại hoàn toàn, khác >90%. "
         "Không giữ quá 8 từ liên tiếp giống nhau với nguồn phổ biến. Tránh lặp cấu trúc câu giữa các câu liên tiếp."
     )
@@ -976,9 +983,9 @@ def api_ai_generate():
         f"Từ khoá tham chiếu: {keyword}\n"
     )
 
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {
-        "model": OPENAI_MODEL,
+        "model": model,
         "messages": [
             {"role": "system", "content": sys_msg},
             {"role": "user",  "content": user_msg}
@@ -1026,7 +1033,6 @@ def api_ai_generate():
     bullets_block = "\n".join(f"- {l}" for l in bullet_lines)
 
     # ====== Icons (random per call, diverse) ======
-    # Seed theo thời gian + page để tránh trùng
     rnd = random.Random(int(time.time() * 1000) ^ hash(page_id or "") ^ random.getrandbits(32))
     i1, i2 = rnd.sample(ICON_POOL, 2)
     method_icon = rnd.choice(METHOD_ICON_POOL)
@@ -1074,13 +1080,16 @@ def api_ai_generate():
     ] if t)
 
     # Contextual hashtags (from body + bullets)
+    VI_EN_STOP = VI_EN_STOP  # (giữ để dùng trong scope)
+    def tok_words_ctx(s: str) -> list:
+        return tok_words(s)
     context_source = " ".join([body_text] + bullet_lines)
     manual_candidates = [
         "nạp rút nhanh","khuyến mãi","mở khóa tài khoản","xác minh tài khoản",
         "bảo mật đa lớp","link chính xác","trang mạo danh","kết nối ổn định",
-        "hoàn tiền", "không mất thuế","cskh 24/7","giao dịch tức thì"
+        "hoàn tiền","không mất thuế","cskh 24/7","giao dịch tức thì"
     ]
-    tokens = tok_words(context_source)
+    tokens = tok_words_ctx(context_source)
     ngrams = set()
     for n in (2, 3):
         for i in range(len(tokens)-n+1):
@@ -1092,9 +1101,7 @@ def api_ai_generate():
     dynamic_tags, seen = [], set()
     for cand in candidates:
         tag = camel_hashtag(cand)
-        if not tag: 
-            continue
-        if tag.lower() in seen:
+        if not tag or tag.lower() in seen:
             continue
         dynamic_tags.append(tag); seen.add(tag.lower())
         if len(dynamic_tags) >= 10:
@@ -1158,7 +1165,6 @@ def api_ai_generate():
         bullets_block = "\n".join(f"- {l}" for l in new_bullet_lines)
         body_text = new_body
         final_text = compose_text()
-        # Re-check policy; if violation appears, stop and error
         if detect_violation(final_text):
             return jsonify({
                 "error": "CONTENT_POLICY_VIOLATION",
@@ -1166,9 +1172,7 @@ def api_ai_generate():
             }), 400
         tries += 1
 
-    # Remember to corpus for future similarity checks
     remember(page_id or "GLOBAL", final_text)
-
     return jsonify({"text": final_text}), 200
 
 # ------------------------ Minimal webhook endpoints (optional) ------------------------
