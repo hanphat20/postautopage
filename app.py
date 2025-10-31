@@ -766,73 +766,207 @@ def api_settings_save():
 
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
+    """
+    Generate a promotional/support post. Includes optional baccarat tips (framed as entertainment)
+    and a free prediction tool mention with explicit disclaimer (no guaranteed accuracy).
+    """
     import random, unicodedata
     js = request.get_json(force=True) or {}
     page_id = js.get("page_id") or ""
     extra_prompt = (js.get("prompt") or "").strip()
+
     if not page_id:
-      return jsonify({"error":"Chưa chọn Page"})
+        return jsonify({"error": "Chưa chọn Page"})
+
     settings = _load_settings()
     conf = settings.get(page_id) or {}
     keyword = (conf.get("keyword") or "").strip()
     source  = (conf.get("source") or "").strip()
+
     if not keyword and not source:
-      return jsonify({"error":"Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
+        return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
+
     def no_accent(s):
-      return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+        return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+
     def pick(arr, k=1):
-      arr = list(arr); random.shuffle(arr)
-      return arr[0] if k==1 else arr[:k]
-    brand = keyword.strip(); brand_upper = brand.upper(); brand_slug = no_accent(brand).replace(" ","")
+        arr = list(arr); random.shuffle(arr)
+        return arr[0] if k==1 else arr[:k]
+
+    brand = keyword.strip()
+    brand_upper = brand.upper()
+    brand_slug = no_accent(brand).replace(" ", "")
+
+    # Title
     icons = ["🌟","☀️","💥","🔰","✨","🚀","🔥","🎯","✅","🔒"]
     title_patterns = [
-      "{i1} Truy cập Link {brand} Chính Thức – Không Bị Chặn {i2}",
-      "{i1} Link {brand} Chính Thức | An Toàn – Hợp Pháp {i2}",
-      "{i1} {brand} – Cổng Truy Cập Chính Chủ, Không Lo Chặn {i2}",
-      "{i1} {brand} Official Link · Ổn Định – Bảo Mật {i2}",
-      "{i1} Truy Cập {brand} Nhanh • Không Mất Thuế • Uy Tín {i2}",
+        "{i1} Truy cập Link {brand} Chính Thức – An Toàn & Hợp Pháp {i2}",
+        "{i1} Link {brand} Chính Thức · Ổn Định – Không Bị Chặn {i2}",
+        "{i1} {brand} – Cổng Truy Cập Chính Chủ, Hỗ Trợ 24/7 {i2}",
+        "{i1} Truy Cập {brand} Nhanh • An Toàn • Uy Tín {i2}",
     ]
     i1,i2 = pick(icons,2)
-    title = random.choice(title_patterns).format(i1=i1,i2=i2,brand=brand_upper)
+    title = random.choice(title_patterns).format(i1=i1, i2=i2, brand=brand_upper)
+
+    # Supportive opener
     openers = [
-      f"Truy cập vào đường dẫn chính thức của {brand} để tránh các trang giả mạo hoặc link bị chặn.",
-      f"Đây là cổng truy cập {brand} đã kiểm duyệt, đảm bảo vào nhanh – ổn định – không bị chặn.",
-      f"Sử dụng link chuẩn của {brand} để giao dịch mượt mà và bảo vệ tài khoản của bạn.",
+        f"Truy cập đường dẫn chính thức của {brand} để tránh trang giả mạo và đảm bảo an toàn cho tài khoản của bạn.",
+        f"Đây là link chính thức của {brand} — vào nhanh, ổn định và được hỗ trợ 24/7.",
+        f"Sử dụng link chính thức {brand} để giao dịch mượt mà, bảo mật và hợp pháp.",
     ]
+
+    # Main support bullets (varied tone)
     bullets_pool = [
-      "Hỗ trợ **nạp không lên điểm**: kiểm tra giao dịch và cộng điểm ngay khi xác minh.",
-      "Xử lý **rút tiền không về** hoặc bị treo: ưu tiên kiểm tra và đẩy nhanh lệnh rút.",
-      "Giải quyết **tài khoản bị khoá**: xác minh danh tính và mở khoá an toàn.",
-      "Hỗ trợ **lấy lại tiền** trong trường hợp thao tác sai hoặc nhầm link.",
-      "Sai link/nhập nhầm địa chỉ: đội ngũ sẽ **truy vết giao dịch** và hỗ trợ hoàn tiền nếu đủ điều kiện.",
-      "Cập nhật **khuyến mãi** và ưu đãi hội viên theo ngày/tuần.",
-      "Cam kết **bảo mật – hợp pháp**; quy trình tuân thủ, an toàn khi giao dịch.",
-      "**Không mất thuế** khi nạp rút theo đúng hướng dẫn chính thức.",
-      "Hỗ trợ 24/7 qua nhiều kênh, tiếp nhận và xử lý **mọi sự cố tài khoản**.",
+        "Hỗ trợ kiểm tra giao dịch khi **nạp không lên điểm** và xử lý kịp thời.",
+        "Xử lý sự cố **rút tiền không về** hoặc bị treo — ưu tiên xử lý nhanh.",
+        "Giải quyết **tài khoản bị khoá**: hướng dẫn xác minh để mở khoá an toàn.",
+        "Hỗ trợ **lấy lại tiền** khi thao tác sai link nếu đủ điều kiện xử lý.",
+        "Sai link/nhập nhầm: đội ngũ sẽ kiểm tra giao dịch và hỗ trợ giải quyết.",
+        "Cập nhật khuyến mãi và ưu đãi cho thành viên thường xuyên.",
+        "Cam kết bảo mật thông tin — quy trình tuân thủ và hợp pháp.",
+        "Hướng dẫn quản lý vốn cơ bản: đặt giới hạn, không đặt quá số tiền cho phép.",
+        "Hỗ trợ 24/7 qua nhiều kênh để xử lý mọi vấn đề dịch vụ.",
     ]
-    n_pick = random.randint(5,7)
+    n_pick = random.randint(4,6)
     bullets = pick(bullets_pool, n_pick)
+
+    # Optional baccarat tips (framed as entertainment; no guaranteed winnings)
+    baccarat_tips = []
+    if js.get("include_baccarat_tips") or "bacarat" in extra_prompt.lower() or "baccarat" in extra_prompt.lower():
+        baccarat_advice_variants = [
+            "Mẹo chơi Baccarat (mang tính giải trí): quản lý vốn chặt chẽ, chia nhỏ ngân sách và dừng khi đạt mục tiêu.",
+            "Gợi ý chơi: ưu tiên cược theo xu hướng (trend) ngắn hạn và tránh cược theo cảm xúc.",
+            "Không có phương pháp đảm bảo thắng — mọi chiến lược đều có rủi ro. Hãy chơi có trách nhiệm.",
+            "Thống kê cá cược có thể giúp nhận diện xu hướng, nhưng không thể dự đoán chắc chắn kết quả.",
+        ]
+        baccarat_tips = pick(baccarat_advice_variants, random.randint(2,3))
+        # Mention a free tool but with explicit disclaimer
+        baccarat_tips.append("Tặng công cụ tham khảo (miễn phí) giúp phân tích xu hướng => LƯU Ý: công cụ chỉ hỗ trợ tham khảo, không đảm bảo tỉ lệ thắng. Sử dụng cẩn trọng.")
+
     more_lines = []
-    if source: more_lines.append(f"Link truy cập nhanh: {source}")
-    if extra_prompt: more_lines.append(f"Yêu cầu thêm: {extra_prompt}")
-    contact_block = "Thông tin liên hệ hỗ trợ:
-SĐT: 0927395058
-Telegram: @cattien999"
-    base_tags = [f"#{brand_slug}", f"#LinkChínhThức{brand_slug}", f"#{brand_slug}AnToàn", f"#HỗTrợLấyLạiTiền{brand_slug}", f"#RútTiền{brand_slug}", f"#MởKhóaTàiKhoản{brand_slug}"]
-    extra_tags_pool = ["UyTin","BaoMat","KhongBiChan","NapTien","RutTienNhanh","HoTro24h","KhuyenMai","DangKyNhanh","ChuyenGiaHoTro","KhachHang","LinkChinhChu","CongGame","TheThao","Casino","KhuyenMaiHomNay"]
+    if source:
+        more_lines.append(f"Link truy cập nhanh: {source}")
+    if extra_prompt:
+        more_lines.append(f"Yêu cầu thêm: {extra_prompt}")
+
+    contact_block = "Thông tin liên hệ hỗ trợ:\nSĐT: 0927395058\nTelegram: @cattien999"
+
+    # Hashtags: include baccarat-related tags if relevant
+    base_tags = [
+        f"#{brand_slug}", f"#LinkChínhThức{brand_slug}", f"#{brand_slug}AnToàn",
+        f"#HỗTrợLấyLạiTiền{brand_slug}", f"#RútTiền{brand_slug}", f"#MởKhóaTàiKhoản{brand_slug}"
+    ]
+    extra_tags_pool = [
+        "UyTin","BaoMat","KhongBiChan","NapTien","RutTienNhanh","HoTro24h",
+        "KhuyenMai","DangKyNhanh","ChuyenGiaHoTro","KhachHang","LinkChinhChu",
+        "CongGame","TheThao","Casino","KhuyenMaiHomNay",
+        # baccarat-related
+        "Baccarat","BacaratTips","NoHũ","NoHu","ToolBaccarat","BatCau","BatCauLongBao"
+    ]
     extra = [f"#{brand_slug}{t}" for t in pick(extra_tags_pool, random.randint(4,6))]
     hashtags = " ".join(base_tags + extra)
+
+    # Assemble text
     lines = [title, "", random.choice(openers), "", "Thông tin quan trọng:"]
     for b in bullets:
-      lines.append(f"{random.choice(['•','-','▹'])} {b}")
+        lines.append(f"{random.choice(['•','-','▹'])} {b}")
+    if baccarat_tips:
+        lines.append("")
+        lines.append("Lưu ý chơi (mang tính tham khảo):")
+        for t in baccarat_tips:
+            lines.append(f"- {t}")
     if more_lines:
-      lines.append("")
-      lines += more_lines
-    lines += ["", contact_block, "", hashtags]
-    text = "
-".join(lines).strip()
+        lines.append("")
+        lines += more_lines
+
+    lines.append("")
+    lines.append(contact_block)
+    lines.append("")
+    lines.append("⚠️ Lưu ý quan trọng: Chơi có trách nhiệm — không có chiến lược hay công cụ nào đảm bảo thắng 100%.")
+    lines.append("")
+    lines.append(hashtags)
+
+    text = "\n".join(lines).strip()
     return jsonify({"text": text})
-})
+
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    """Simple local upload to /mnt/data and return path for later"""
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error":"Không có file"})
+    base = "/mnt/data"
+    os.makedirs(base, exist_ok=True)
+    save_path = os.path.join(base, f.filename)
+    f.save(save_path)
+    return jsonify({"ok": True, "path": save_path})
+
+
+# ------------------------ API: Post to pages ------------------------
+
+@app.route("/api/pages/post", methods=["POST"])
+def api_pages_post():
+    try:
+        js = request.get_json(force=True) or {}
+        pages: t.List[str] = js.get("pages", [])
+        text_content = (js.get("text") or "").strip()
+        media_url = (js.get("image_url") or js.get("media_url") or "").strip() or None
+        media_path = (js.get("media_path") or "").strip() or None
+        post_type = (js.get("post_type") or "feed").strip()  # feed | reels
+
+        if not pages:
+            return jsonify({"error": "Chọn ít nhất 1 page"})
+        if not text_content and not media_url and not media_path:
+            return jsonify({"error": "Thiếu nội dung hoặc media"})
+
+        results = []
+        for pid in pages:
+            token = get_page_token(pid)
+
+            # Decide media type
+            is_video = False
+            if media_path:
+                lower = media_path.lower()
+                is_video = lower.endswith(('.mp4','.mov','.mkv','.avi','.webm'))
+            elif media_url:
+                lower = media_url.lower()
+                is_video = any(ext in lower for ext in ['.mp4','.mov','.mkv','.avi','.webm'])
+
+            try:
+                if media_path:  # local upload
+                    if is_video:
+                        with open(media_path, 'rb') as f:
+                            out = session.post(f"{FB_API}/{pid}/videos",
+                                               params={"access_token": token},
+                                               files={"source": (os.path.basename(media_path), f)},
+                                               data={"description": text_content},
+                                               timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT)).json()
+                    else:
+                        with open(media_path, 'rb') as f:
+                            out = session.post(f"{FB_API}/{pid}/photos",
+                                               params={"access_token": token},
+                                               files={"source": (os.path.basename(media_path), f)},
+                                               data={"caption": text_content},
+                                               timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT)).json()
+                elif media_url:
+                    if is_video:
+                        out = fb_post(f"{pid}/videos", {"file_url": media_url, "description": text_content, "access_token": token})
+                    else:
+                        out = fb_post(f"{pid}/photos", {"url": media_url, "caption": text_content, "access_token": token})
+                else:
+                    # text only
+                    out = fb_post(f"{pid}/feed", {"message": text_content, "access_token": token})
+
+                # NOTE: Facebook Reels for Pages API có thể khác; nếu chọn reels nhưng chúng ta đăng video qua /videos, trả kèm note
+                note = None
+                if post_type == 'reels' and not is_video:
+                    note = 'Reels yêu cầu video; đã đăng như Feed do không có video.'
+                results.append({"page_id": pid, "result": out, "note": note})
+            except Exception as e:
+                results.append({"page_id": pid, "error": str(e)})
+        return jsonify({"ok": True, "results": results})
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 
 # ------------------------ Minimal webhook endpoints (optional) ------------------------
