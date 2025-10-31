@@ -2,7 +2,6 @@ import json
 import os
 import time
 import typing as t
-import csv
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -19,41 +18,15 @@ DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
-# ✅ CHANGE: use project file by default (persistent across redeploys)
-SETTINGS_FILE = os.getenv('SETTINGS_FILE', 'page_settings.json')
+
+SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/mnt/data/page_settings.json')
 
 def _load_settings():
-    """
-    Load page settings. If the settings file is missing, try to create it
-    from a local settings.csv (headers: id,name,keyword,source).
-    """
-    # Prefer reading the JSON file
     try:
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception:
-        pass
-
-    # Auto-init from CSV (optional)
-    try:
-        if os.path.exists('settings.csv'):
-            data = {}
-            with open('settings.csv', newline='', encoding='utf-8') as f:
-                rdr = csv.DictReader(f)
-                for row in rdr:
-                    pid = (row.get('id') or '').strip()
-                    if not pid:
-                        continue
-                    data[pid] = {
-                        'keyword': (row.get('keyword') or row.get('tukhoa') or '').strip(),
-                        'source':  (row.get('source')  or row.get('link')   or '').strip(),
-                    }
-            _save_settings(data)
-            return data
-    except Exception:
-        pass
-
-    return {}
+        return {}
 
 def _save_settings(data: dict):
     try:
@@ -372,7 +345,13 @@ INDEX_HTML = r"""<!doctype html>
       // chuẩn hoá link facebook
       let openLink = x.link || '';
       if (openLink && openLink.startsWith('/')) { openLink = 'https://facebook.com' + openLink; }
-      return '<div class="conv-item" data-idx="'+i+'">        <div>          <div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>          <div class="conv-meta">'+(x.snippet||'')+'</div>        </div>        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(openLink?('<div style="margin-top:4px"><a target="_blank" href="'+openLink+'">Mở trên Facebook</a></div>'):'')+'</div>      </div>';
+      return '<div class="conv-item" data-idx="'+i+'">\
+        <div>\
+          <div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>\
+          <div class="conv-meta">'+(x.snippet||'')+'</div>\
+        </div>\
+        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(openLink?('<div style="margin-top:4px"><a target="_blank" href="'+openLink+'">Mở trên Facebook</a></div>'):'')+'</div>\
+      </div>';
     }).join('') || '<div class="muted">Không có hội thoại.</div>';
     st && (st.textContent = 'Tải ' + items.length + ' hội thoại.');
     const totalUnread = items.reduce((a,b)=>a+(b.unread_count||0),0);
@@ -417,7 +396,12 @@ INDEX_HTML = r"""<!doctype html>
         const who  = (m.from && m.from.name) ? m.from.name : '';
         const time = m.created_time ? new Date(m.created_time).toLocaleString('vi-VN') : '';
         const side = m.is_page ? 'right' : 'left';
-        return '<div style="display:flex;justify-content:'+(side==='right'?'flex-end':'flex-start')+';margin:6px 0">          <div class="bubble '+(side==='right'?'right':'')+'">            <div class="meta">'+(who||'')+(time?(' · '+time):'')+'</div>            <div>'+(m.message||'(media)')+'</div>          </div>        </div>';
+        return '<div style="display:flex;justify-content:'+(side==='right'?'flex-end':'flex-start')+';margin:6px 0">\
+          <div class="bubble '+(side==='right'?'right':'')+'">\
+            <div class="meta">'+(who||'')+(time?(' · '+time):'')+'</div>\
+            <div>'+(m.message||'(media)')+'</div>\
+          </div>\
+        </div>';
       }).join('');
       box.scrollTop = box.scrollHeight;
       st && (st.textContent = 'Tải ' + msgs.length + ' tin nhắn');
@@ -779,124 +763,76 @@ def api_settings_save():
 
 
 # ------------------------ API: AI generate from settings ------------------------
+
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
+    import random, unicodedata
     js = request.get_json(force=True) or {}
     page_id = js.get("page_id") or ""
-    prompt = (js.get("prompt") or "").strip()
-
+    extra_prompt = (js.get("prompt") or "").strip()
     if not page_id:
-        return jsonify({"error": "Chưa chọn Page"})
-
+      return jsonify({"error":"Chưa chọn Page"})
     settings = _load_settings()
     conf = settings.get(page_id) or {}
     keyword = (conf.get("keyword") or "").strip()
     source  = (conf.get("source") or "").strip()
-
     if not keyword and not source:
-        return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
-
-    lines = []
-    if keyword:
-        lines.append(f"📌 Chủ đề: {keyword}")
-    if source:
-        lines.append(f"🔗 Tham khảo: {source}")
-    if prompt:
-        lines.append("")
-        lines.append(f"Yêu cầu thêm: {prompt}")
-
-    lines.append("")
-    lines.append("———")
-    lines.append(f"{keyword or 'Bài viết'} – tóm tắt ngắn:")
-    lines.append(f"- Giới thiệu nhanh về {keyword.lower() if keyword else 'chủ đề'}")
-    lines.append("- 3 lợi ích chính cho người đọc")
-    lines.append("- Gợi ý hành động (CTA) rõ ràng")
-    if source:
-        lines.append("\n➡️ Xem chi tiết: {source}")
-
-    text = "\n".join(lines).strip()
+      return jsonify({"error":"Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
+    def no_accent(s):
+      return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+    def pick(arr, k=1):
+      arr = list(arr); random.shuffle(arr)
+      return arr[0] if k==1 else arr[:k]
+    brand = keyword.strip(); brand_upper = brand.upper(); brand_slug = no_accent(brand).replace(" ","")
+    icons = ["🌟","☀️","💥","🔰","✨","🚀","🔥","🎯","✅","🔒"]
+    title_patterns = [
+      "{i1} Truy cập Link {brand} Chính Thức – Không Bị Chặn {i2}",
+      "{i1} Link {brand} Chính Thức | An Toàn – Hợp Pháp {i2}",
+      "{i1} {brand} – Cổng Truy Cập Chính Chủ, Không Lo Chặn {i2}",
+      "{i1} {brand} Official Link · Ổn Định – Bảo Mật {i2}",
+      "{i1} Truy Cập {brand} Nhanh • Không Mất Thuế • Uy Tín {i2}",
+    ]
+    i1,i2 = pick(icons,2)
+    title = random.choice(title_patterns).format(i1=i1,i2=i2,brand=brand_upper)
+    openers = [
+      f"Truy cập vào đường dẫn chính thức của {brand} để tránh các trang giả mạo hoặc link bị chặn.",
+      f"Đây là cổng truy cập {brand} đã kiểm duyệt, đảm bảo vào nhanh – ổn định – không bị chặn.",
+      f"Sử dụng link chuẩn của {brand} để giao dịch mượt mà và bảo vệ tài khoản của bạn.",
+    ]
+    bullets_pool = [
+      "Hỗ trợ **nạp không lên điểm**: kiểm tra giao dịch và cộng điểm ngay khi xác minh.",
+      "Xử lý **rút tiền không về** hoặc bị treo: ưu tiên kiểm tra và đẩy nhanh lệnh rút.",
+      "Giải quyết **tài khoản bị khoá**: xác minh danh tính và mở khoá an toàn.",
+      "Hỗ trợ **lấy lại tiền** trong trường hợp thao tác sai hoặc nhầm link.",
+      "Sai link/nhập nhầm địa chỉ: đội ngũ sẽ **truy vết giao dịch** và hỗ trợ hoàn tiền nếu đủ điều kiện.",
+      "Cập nhật **khuyến mãi** và ưu đãi hội viên theo ngày/tuần.",
+      "Cam kết **bảo mật – hợp pháp**; quy trình tuân thủ, an toàn khi giao dịch.",
+      "**Không mất thuế** khi nạp rút theo đúng hướng dẫn chính thức.",
+      "Hỗ trợ 24/7 qua nhiều kênh, tiếp nhận và xử lý **mọi sự cố tài khoản**.",
+    ]
+    n_pick = random.randint(5,7)
+    bullets = pick(bullets_pool, n_pick)
+    more_lines = []
+    if source: more_lines.append(f"Link truy cập nhanh: {source}")
+    if extra_prompt: more_lines.append(f"Yêu cầu thêm: {extra_prompt}")
+    contact_block = "Thông tin liên hệ hỗ trợ:
+SĐT: 0927395058
+Telegram: @cattien999"
+    base_tags = [f"#{brand_slug}", f"#LinkChínhThức{brand_slug}", f"#{brand_slug}AnToàn", f"#HỗTrợLấyLạiTiền{brand_slug}", f"#RútTiền{brand_slug}", f"#MởKhóaTàiKhoản{brand_slug}"]
+    extra_tags_pool = ["UyTin","BaoMat","KhongBiChan","NapTien","RutTienNhanh","HoTro24h","KhuyenMai","DangKyNhanh","ChuyenGiaHoTro","KhachHang","LinkChinhChu","CongGame","TheThao","Casino","KhuyenMaiHomNay"]
+    extra = [f"#{brand_slug}{t}" for t in pick(extra_tags_pool, random.randint(4,6))]
+    hashtags = " ".join(base_tags + extra)
+    lines = [title, "", random.choice(openers), "", "Thông tin quan trọng:"]
+    for b in bullets:
+      lines.append(f"{random.choice(['•','-','▹'])} {b}")
+    if more_lines:
+      lines.append("")
+      lines += more_lines
+    lines += ["", contact_block, "", hashtags]
+    text = "
+".join(lines).strip()
     return jsonify({"text": text})
-
-
-# ------------------------ Upload (optional for media local) ------------------------
-@app.route("/api/upload", methods=["POST"])
-def api_upload():
-    """Simple local upload to /mnt/data and return path for later"""
-    f = request.files.get("file")
-    if not f:
-        return jsonify({"error":"Không có file"})
-    base = "/mnt/data"
-    os.makedirs(base, exist_ok=True)
-    save_path = os.path.join(base, f.filename)
-    f.save(save_path)
-    return jsonify({"ok": True, "path": save_path})
-
-
-# ------------------------ API: Post to pages ------------------------
-
-@app.route("/api/pages/post", methods=["POST"])
-def api_pages_post():
-    try:
-        js = request.get_json(force=True) or {}
-        pages: t.List[str] = js.get("pages", [])
-        text_content = (js.get("text") or "").strip()
-        media_url = (js.get("image_url") or js.get("media_url") or "").strip() or None
-        media_path = (js.get("media_path") or "").strip() or None
-        post_type = (js.get("post_type") or "feed").strip()  # feed | reels
-
-        if not pages:
-            return jsonify({"error": "Chọn ít nhất 1 page"})
-        if not text_content and not media_url and not media_path:
-            return jsonify({"error": "Thiếu nội dung hoặc media"})
-
-        results = []
-        for pid in pages:
-            token = get_page_token(pid)
-
-            # Decide media type
-            is_video = False
-            if media_path:
-                lower = media_path.lower()
-                is_video = lower.endswith(('.mp4','.mov','.mkv','.avi','.webm'))
-            elif media_url:
-                lower = media_url.lower()
-                is_video = any(ext in lower for ext in ['.mp4','.mov','.mkv','.avi','.webm'])
-
-            try:
-                if media_path:  # local upload
-                    if is_video:
-                        with open(media_path, 'rb') as f:
-                            out = session.post(f"{FB_API}/{pid}/videos",
-                                               params={"access_token": token},
-                                               files={"source": (os.path.basename(media_path), f)},
-                                               data={"description": text_content},
-                                               timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT)).json()
-                    else:
-                        with open(media_path, 'rb') as f:
-                            out = session.post(f"{FB_API}/{pid}/photos",
-                                               params={"access_token": token},
-                                               files={"source": (os.path.basename(media_path), f)},
-                                               data={"caption": text_content},
-                                               timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT)).json()
-                elif media_url:
-                    if is_video:
-                        out = fb_post(f"{pid}/videos", {"file_url": media_url, "description": text_content, "access_token": token})
-                    else:
-                        out = fb_post(f"{pid}/photos", {"url": media_url, "caption": text_content, "access_token": token})
-                else:
-                    # text only
-                    out = fb_post(f"{pid}/feed", {"message": text_content, "access_token": token})
-
-                # NOTE: Facebook Reels for Pages API có thể khác; nếu chọn reels nhưng chúng ta đăng video qua /videos, trả kèm note
-                note = None
-                if post_type == 'reels' and not is_video:
-                    note = 'Reels yêu cầu video; đã đăng như Feed do không có video.'
-                results.append({"page_id": pid, "result": out, "note": note})
-            except Exception as e:
-                results.append({"page_id": pid, "error": str(e)})
-        return jsonify({"ok": True, "results": results})
-    except Exception as e:
-        return jsonify({"error": str(e)})
+})
 
 
 # ------------------------ Minimal webhook endpoints (optional) ------------------------
