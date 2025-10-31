@@ -1205,17 +1205,16 @@ def api_ai_generate():
         tries += 1
 
     remember(page_id or "GLOBAL", final_text)
-    mode = os.getenv("CONTENT_FILTER_MODE","soft").lower()
-if mode in ("soft","off"):
-    final_text = fb_safe_sanitize(final_text, keyword)
-elif mode == "hard":
-    try:
-        # giữ hành vi cũ nếu có detect_violation
-        if detect_violation(final_text):
-            return jsonify({"error":"CONTENT_POLICY_VIOLATION"}), 400
-    except Exception:
-        pass
-return jsonify({"text": final_text, "filter_mode": mode}), 200
+            mode = os.getenv("CONTENT_FILTER_MODE","soft").lower()
+    if mode in ("soft","off"):
+        final_text = fb_safe_sanitize(final_text, keyword)
+    elif mode == "hard":
+        try:
+            if detect_violation(final_text):
+                return jsonify({"error":"CONTENT_POLICY_VIOLATION"}), 400
+        except Exception:
+            pass
+    return jsonify({"text": final_text, "filter_mode": mode}), 200
 
 # ------------------------ Minimal webhook endpoints (optional) ------------------------
 @app.route("/webhook/events", methods=["GET","POST"])
