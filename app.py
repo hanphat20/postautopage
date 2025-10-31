@@ -2,6 +2,7 @@ import json
 import os
 import time
 import typing as t
+import csv
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -18,15 +19,41 @@ DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
-
-SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/mnt/data/page_settings.json')
+# ✅ CHANGE: use project file by default (persistent across redeploys)
+SETTINGS_FILE = os.getenv('SETTINGS_FILE', 'page_settings.json')
 
 def _load_settings():
+    """
+    Load page settings. If the settings file is missing, try to create it
+    from a local settings.csv (headers: id,name,keyword,source).
+    """
+    # Prefer reading the JSON file
     try:
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception:
-        return {}
+        pass
+
+    # Auto-init from CSV (optional)
+    try:
+        if os.path.exists('settings.csv'):
+            data = {}
+            with open('settings.csv', newline='', encoding='utf-8') as f:
+                rdr = csv.DictReader(f)
+                for row in rdr:
+                    pid = (row.get('id') or '').strip()
+                    if not pid:
+                        continue
+                    data[pid] = {
+                        'keyword': (row.get('keyword') or row.get('tukhoa') or '').strip(),
+                        'source':  (row.get('source')  or row.get('link')   or '').strip(),
+                    }
+            _save_settings(data)
+            return data
+    except Exception:
+        pass
+
+    return {}
 
 def _save_settings(data: dict):
     try:
@@ -345,13 +372,7 @@ INDEX_HTML = r"""<!doctype html>
       // chuẩn hoá link facebook
       let openLink = x.link || '';
       if (openLink && openLink.startsWith('/')) { openLink = 'https://facebook.com' + openLink; }
-      return '<div class="conv-item" data-idx="'+i+'">\
-        <div>\
-          <div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>\
-          <div class="conv-meta">'+(x.snippet||'')+'</div>\
-        </div>\
-        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(openLink?('<div style="margin-top:4px"><a target="_blank" href="'+openLink+'">Mở trên Facebook</a></div>'):'')+'</div>\
-      </div>';
+      return '<div class="conv-item" data-idx="'+i+'">        <div>          <div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>          <div class="conv-meta">'+(x.snippet||'')+'</div>        </div>        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(openLink?('<div style="margin-top:4px"><a target="_blank" href="'+openLink+'">Mở trên Facebook</a></div>'):'')+'</div>      </div>';
     }).join('') || '<div class="muted">Không có hội thoại.</div>';
     st && (st.textContent = 'Tải ' + items.length + ' hội thoại.');
     const totalUnread = items.reduce((a,b)=>a+(b.unread_count||0),0);
@@ -396,12 +417,7 @@ INDEX_HTML = r"""<!doctype html>
         const who  = (m.from && m.from.name) ? m.from.name : '';
         const time = m.created_time ? new Date(m.created_time).toLocaleString('vi-VN') : '';
         const side = m.is_page ? 'right' : 'left';
-        return '<div style="display:flex;justify-content:'+(side==='right'?'flex-end':'flex-start')+';margin:6px 0">\
-          <div class="bubble '+(side==='right'?'right':'')+'">\
-            <div class="meta">'+(who||'')+(time?(' · '+time):'')+'</div>\
-            <div>'+(m.message||'(media)')+'</div>\
-          </div>\
-        </div>';
+        return '<div style="display:flex;justify-content:'+(side==='right'?'flex-end':'flex-start')+';margin:6px 0">          <div class="bubble '+(side==='right'?'right':'')+'">            <div class="meta">'+(who||'')+(time?(' · '+time):'')+'</div>            <div>'+(m.message||'(media)')+'</div>          </div>        </div>';
       }).join('');
       box.scrollTop = box.scrollHeight;
       st && (st.textContent = 'Tải ' + msgs.length + ' tin nhắn');
@@ -796,7 +812,7 @@ def api_ai_generate():
     lines.append("- 3 lợi ích chính cho người đọc")
     lines.append("- Gợi ý hành động (CTA) rõ ràng")
     if source:
-        lines.append(f"\n➡️ Xem chi tiết: {source}")
+        lines.append("\n➡️ Xem chi tiết: {source}")
 
     text = "\n".join(lines).strip()
     return jsonify({"text": text})
