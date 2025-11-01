@@ -572,7 +572,16 @@ INDEX_HTML = r"""<!doctype html>
       const r = await fetch('/api/pages/post', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
       const d = await r.json();
       if(d.error){ st.textContent = d.error; return; }
-      st.textContent = 'Xong: ' + (d.results||[]).length + ' page' + ((d.results||[]).some(x=>x.note)?' (có ghi chú)':'');
+      // Hiển thị link bài viết cho từng page
+      const rows = (d.results||[]).map(x=>{
+        const pg = x.page_id || '';
+        const link = x.link || '';
+        const note = x.note ? (' — ' + x.note) : '';
+        const err  = x.error ? (' — lỗi: ' + x.error) : '';
+        const a = link ? ('<a href="'+link+'" target="_blank">Mở bài</a>') : '(chưa có link)';
+        return '• ' + pg + ': ' + a + note + err;
+      }).join('<br>');
+      st.innerHTML = 'Xong: ' + (d.results||[]).length + ' page' + ((d.results||[]).some(x=>x.note)?' (có ghi chú)':'') + '<br>' + rows;
     }catch(e){ st.textContent = 'Lỗi đăng bài'; }
   });
 
@@ -1080,7 +1089,59 @@ def api_upload():
     return jsonify({"ok": True, "path": save_path})
 
 
-# ------------------------ API: Post to pages ------------------------
+# ------------------------ Permalink helpers (NEW) ------------------------
+
+def _build_fallback_link(page_id: str, any_id: str) -> str:
+    """
+    Fallback tạo link đọc được:
+    - Nếu ID dạng {pageId}_{postId} -> https://www.facebook.com/{pageId}/posts/{postId}
+    - Ngược lại -> https://www.facebook.com/{any_id}
+    """
+    try:
+        if "_" in (any_id or ""):
+            pid, postid = any_id.split("_", 1)
+            return f"https://www.facebook.com/{pid}/posts/{postid}"
+        return f"https://www.facebook.com/{any_id}"
+    except Exception:
+        return f"https://www.facebook.com/{any_id or page_id}"
+
+def _resolve_permalink(page_id: str, token: str, api_result: dict) -> dict:
+    """
+    Cố gắng lấy permalink_url từ Graph.
+    Nếu không được, dựng fallback link.
+    Trả về {"permalink": <url>, "source_id": <id dùng để tra cứu>, "fallback": <url_fallback>}
+    """
+    candidate_ids = []
+    for key in ("id", "post_id", "video_id"):
+        v = (api_result or {}).get(key)
+        if v and v not in candidate_ids:
+            candidate_ids.append(v)
+
+    post_id = (api_result or {}).get("post_id")
+    if post_id and post_id not in candidate_ids:
+        candidate_ids.insert(0, post_id)
+
+    for cid in candidate_ids:
+        try:
+            r = fb_get(str(cid), {"access_token": token, "fields": "permalink_url"})
+            permalink = r.get("permalink_url")
+            if permalink:
+                return {
+                    "permalink": permalink,
+                    "source_id": cid,
+                    "fallback": _build_fallback_link(page_id, cid)
+                }
+        except Exception:
+            continue
+
+    fallback_id = candidate_ids[0] if candidate_ids else (api_result.get("id") or page_id)
+    return {
+        "permalink": _build_fallback_link(page_id, fallback_id),
+        "source_id": fallback_id,
+        "fallback": _build_fallback_link(page_id, fallback_id)
+    }
+
+# ------------------------ API: Post to pages (returns permalink) ------------------------
 
 @app.route("/api/pages/post", methods=["POST"])
 def api_pages_post():
@@ -1110,35 +1171,73 @@ def api_pages_post():
                 is_video = any(ext in lower for ext in ['.mp4','.mov','.mkv','.avi','.webm'])
 
             try:
+                # --- POST nội dung ---
                 if media_path:  # local upload
                     if is_video:
                         with open(media_path, 'rb') as f:
-                            out = session.post(f"{FB_API}/{pid}/videos",
-                                               params={"access_token": token},
-                                               files={"source": (os.path.basename(media_path), f)},
-                                               data={"description": text_content},
-                                               timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT)).json()
+                            out = session.post(
+                                f"{FB_API}/{pid}/videos",
+                                params={"access_token": token},
+                                files={"source": (os.path.basename(media_path), f)},
+                                data={"description": text_content},
+                                timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT)
+                            ).json()
                     else:
                         with open(media_path, 'rb') as f:
-                            out = session.post(f"{FB_API}/{pid}/photos",
-                                               params={"access_token": token},
-                                               files={"source": (os.path.basename(media_path), f)},
-                                               data={"caption": text_content},
-                                               timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT)).json()
+                            out = session.post(
+                                f"{FB_API}/{pid}/photos",
+                                params={"access_token": token},
+                                files={"source": (os.path.basename(media_path), f)},
+                                data={"caption": text_content},
+                                timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT)
+                            ).json()
                 elif media_url:
                     if is_video:
-                        out = fb_post(f"{pid}/videos", {"file_url": media_url, "description": text_content, "access_token": token})
+                        out = fb_post(f"{pid}/videos", {
+                            "file_url": media_url,
+                            "description": text_content,
+                            "access_token": token
+                        })
                     else:
-                        out = fb_post(f"{pid}/photos", {"url": media_url, "caption": text_content, "access_token": token})
+                        out = fb_post(f"{pid}/photos", {
+                            "url": media_url,
+                            "caption": text_content,
+                            "access_token": token
+                        })
                 else:
-                    out = fb_post(f"{pid}/feed", {"message": text_content, "access_token": token})
+                    # /feed thường trả id dạng {page_id}_{post_id}
+                    out = fb_post(f"{pid}/feed", {
+                        "message": text_content,
+                        "access_token": token
+                    })
+
+                # --- RÁNG LẤY PERMALINK ---
+                perm = _resolve_permalink(pid, token, out)
+                link = perm.get("permalink") or perm.get("fallback")
 
                 note = None
-                if post_type == 'reels' and not is_video:
-                    note = 'Reels yêu cầu video; đã đăng như Feed do không có video.'
-                results.append({"page_id": pid, "result": out, "note": note})
+                if post_type == 'reels':
+                    # Reels yêu cầu video; nếu không có video, đã fallback đăng Feed
+                    if not is_video:
+                        note = 'Reels yêu cầu video; đã đăng như Feed do không có video.'
+
+                results.append({
+                    "page_id": pid,
+                    "result": out,
+                    "link": link,
+                    "source_id": perm.get("source_id"),
+                    "note": note
+                })
             except Exception as e:
-                results.append({"page_id": pid, "error": str(e)})
+                # Trong trường hợp lỗi nửa chừng, vẫn cố gắng dựng link fallback nếu có id
+                link = None
+                try:
+                    rid = (locals().get("out") or {}).get("id")  # nếu out tồn tại
+                    if rid:
+                        link = _build_fallback_link(pid, rid)
+                except Exception:
+                    pass
+                results.append({"page_id": pid, "error": str(e), "link": link})
         return jsonify({"ok": True, "results": results})
     except Exception as e:
         return jsonify({"error": str(e)})
