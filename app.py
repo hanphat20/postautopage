@@ -4,6 +4,7 @@ import time
 import typing as t
 import csv
 import re
+import math
 import random
 import uuid
 from collections import Counter
@@ -26,10 +27,6 @@ DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
 OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL    = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-# --- body length config (có thể đổi bằng ENV) ---
-BODY_MIN_WORDS = int(os.getenv("BODY_MIN_WORDS", "160"))
-BODY_MAX_WORDS = int(os.getenv("BODY_MAX_WORDS", "260"))
-
 # Anti-dup
 ANTI_DUP_ENABLED = os.getenv("ANTI_DUP_ENABLED", "1") not in ("0","false","False")
 DUP_J_THRESHOLD  = float(os.getenv("DUP_J", "0.35"))
@@ -48,36 +45,30 @@ SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/tmp/page_settings.json')
 def _load_settings():
     """
     Load page settings JSON. Returns dict.
-    Tự phục hồi khi file tồn tại nhưng JSON hỏng (trả {}).
-    Nếu không có, thử bootstrap từ settings.csv (nếu có).
+    On first run, if JSON missing and settings.csv exists, bootstrap from CSV.
     """
     try:
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f) or {}
+            return json.load(f)
     except FileNotFoundError:
-        pass
-    except Exception:
-        # JSON hỏng hoặc quyền đọc lỗi -> fallback rỗng
-        return {}
+        pass  # Will try CSV bootstrap below
 
     data = {}
     if os.path.exists('settings.csv'):
-        try:
-            with open('settings.csv', newline='', encoding='utf-8') as f:
-                rdr = csv.DictReader(f)
-                for row in rdr:
-                    pid = (row.get('id') or '').strip()
-                    if not pid:
-                        continue
-                    data[pid] = {
-                        "keyword": (row.get('keyword') or row.get('keywords') or '').strip(),
-                        "source":  (row.get('source')  or row.get('link')     or '').strip(),
-                    }
-            _save_settings(data)
-        except Exception:
-            # Nếu CSV lỗi, vẫn trả data rỗng để UI hoạt động
-            data = {}
-    return data
+        with open('settings.csv', newline='', encoding='utf-8') as f:
+            rdr = csv.DictReader(f)
+            for row in rdr:
+                pid = (row.get('id') or '').strip()
+                if not pid:
+                    continue
+                data[pid] = {
+                    "keyword": (row.get('keyword') or row.get('keywords') or '').strip(),
+                    "source":  (row.get('source')  or row.get('link')     or '').strip(),
+                }
+        _save_settings(data)
+        return data
+
+    return {}
 
 def _ensure_dir_for(path: str):
     d = os.path.dirname(path)
@@ -85,6 +76,7 @@ def _ensure_dir_for(path: str):
         os.makedirs(d, exist_ok=True)
 
 def _save_settings(data: dict):
+    """Persist settings to disk. Raise exceptions to surface real errors."""
     _ensure_dir_for(SETTINGS_FILE)
     with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -108,6 +100,12 @@ session.mount("https://", adapter)
 session.mount("http://", adapter)
 
 def _load_tokens() -> dict:
+    """
+    Load tokens from (priority):
+    - env PAGE_TOKENS='{ "page_id":"EAAX..." }'
+    - secret file (TOKENS_FILE)
+    Return dict {page_id: token}
+    """
     env_json = os.getenv("PAGE_TOKENS")
     if env_json:
         try:
@@ -117,6 +115,7 @@ def _load_tokens() -> dict:
     try:
         with open(TOKENS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
+        # accept structure {"pages": {"id": "token", ...}} or plain mapping
         if isinstance(data, dict) and "pages" in data and isinstance(data["pages"], dict):
             return data["pages"]
         if isinstance(data, dict):
@@ -160,7 +159,7 @@ def fb_post(path: str, data: dict, timeout: int = 30) -> dict:
         raise RuntimeError(f"FB POST {url} failed: {js}")
     return js
 
-# ------------------------ Emoji & helpers ------------------------
+# ------------------------ Emoji & helpers (NEW) ------------------------
 
 EMOJI_HEADLINE = ["🔗","🛡️","✅","🚀","📌","🎯","✨"]
 EMOJI_HASHTAG  = ["🏷️","🔖","🧾","📎"]
@@ -178,9 +177,16 @@ def _pick(lst, n=1, allow_dup=False):
     return cp[:min(n, len(cp))]
 
 def _decorate_emojis(text: str) -> str:
+    """
+    - Giữ nguyên 3 dòng đầu (đã chèn icon khi dựng).
+    - Thêm 1–2 emoji nhẹ cho thân bài (sau dòng 3).
+    - Thay bullet '- ' bằng emoji bullets trong mục 'Thông tin quan trọng:'.
+    """
     lines = text.splitlines()
     if len(lines) <= 3:
         return text
+
+    # 1) Thân bài: chèn 1–2 emoji cuối câu
     body_start, body_end = 3, len(lines)
     for i in range(3, len(lines)):
         if "Thông tin quan trọng" in lines[i]:
@@ -195,6 +201,8 @@ def _decorate_emojis(text: str) -> str:
         if added < len(inline_emojis):
             lines[i] = lines[i] + " " + inline_emojis[added]
             added += 1
+
+    # 2) Bullets: đổi '- ' -> '<emoji> '
     in_bullets = False
     for i in range(3, len(lines)):
         s = lines[i].strip()
@@ -204,6 +212,7 @@ def _decorate_emojis(text: str) -> str:
         if in_bullets:
             if s.startswith("- "):
                 rest = s[2:].lstrip()
+                # nếu đã có emoji, bỏ qua
                 if rest and not (rest[0].isascii() and rest[0].isalnum()):
                     continue
                 emo = _pick(EMOJI_BULLETS, 1)[0]
@@ -211,9 +220,10 @@ def _decorate_emojis(text: str) -> str:
             else:
                 if s == "" or not s.startswith("-"):
                     in_bullets = False
+
     return "\n".join(lines)
 
-# ------------------------ Frontend (HTML+JS) ------------------------
+# ------------------------ Frontend ------------------------
 
 INDEX_HTML = r"""<!doctype html>
 <html lang="vi">
@@ -256,10 +266,25 @@ INDEX_HTML = r"""<!doctype html>
     .right{ text-align:right }
     .sendbar{display:flex;gap:8px;margin-top:8px}
     .sendbar input{flex:1}
-    .settings-row{display:grid;grid-template-columns:300px 1fr 1fr;gap:12px;align-items:center}
-    .settings-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .settings-input{width:100%;min-height:36px;padding:8px 10px;border:1px solid #ddd;border-radius:8px}
-    #settings_box{padding:12px}
+
+    /* Settings layout */
+    .settings-row{
+      display:grid;
+      grid-template-columns: 300px 1fr 1fr; /* Tên page | Keyword | Source */
+      gap:12px;
+      align-items:center;
+    }
+    .settings-name{
+      font-weight:600;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .settings-input{
+      width:100%;
+      min-height:36px;
+      padding:8px 10px;
+      border:1px solid #ddd; border-radius:8px;
+    }
+    #settings_box{ padding:12px; }
   </style>
 </head>
 <body>
@@ -312,7 +337,9 @@ INDEX_HTML = r"""<!doctype html>
       <div class="pages-box" id="post_pages_box"></div>
       <div class="row" style="margin-top:8px">
         <textarea id="ai_prompt" placeholder="Prompt để AI viết bài..."></textarea>
-        <div class="row"><button class="btn" id="btn_ai_generate">Tạo nội dung bằng AI</button></div>
+        <div class="row">
+          <button class="btn" id="btn_ai_generate">Tạo nội dung bằng AI</button>
+        </div>
       </div>
       <div class="row" style="margin-top:8px">
         <textarea id="post_text" placeholder="Nội dung (có thể chỉnh sau khi AI tạo)..."></textarea>
@@ -363,18 +390,21 @@ INDEX_HTML = r"""<!doctype html>
     try{
       const r = await fetch('/api/pages'); const d = await r.json();
       const pages = d.data || [];
-      const html  = pages.map(p=>('<label class="checkbox"><input type="checkbox" class="pg-inbox" value="'+p.id+'"> '+(p.name||p.id)+'</label>')).join('');
-      const html2 = pages.map(p=>('<label class="checkbox"><input type="checkbox" class="pg-post" value="'+p.id+'"> '+(p.name||p.id)+'</label>')).join('');
+      const html = pages.map(p=>('<label class="checkbox"><input type="checkbox" class="pg-inbox" value="'+p.id+'"> '+(p.name||p.id)+'</label>')).join('');
+      const html2= pages.map(p=>('<label class="checkbox"><input type="checkbox" class="pg-post" value="'+p.id+'"> '+(p.name||p.id)+'</label>')).join('');
       box1.innerHTML = html; box2.innerHTML = html2;
-      st1 && (st1.textContent = 'Tải ' + pages.length + ' page.');
+      st1 && (st1.textContent = 'Tải ' + pages.length + ' page.'); 
       st2 && (st2.textContent = 'Tải ' + pages.length + ' page.');
-
       const sa1 = $('#inbox_select_all'); const sa2 = $('#post_select_all');
-      if(sa1){ sa1.checked = false; sa1.onchange = () => { const c = sa1.checked; $all('.pg-inbox').forEach(cb => cb.checked = c); }; }
-      if(sa2){ sa2.checked = false; sa2.onchange = () => { const c = sa2.checked; $all('.pg-post').forEach(cb => cb.checked = c); }; }
-
+      if(sa1){ sa1.checked = false; sa1.onchange = () => {
+        const checked = sa1.checked; $all('.pg-inbox').forEach(cb => cb.checked = checked);
+      }; }
+      if(sa2){ sa2.checked = false; sa2.onchange = () => {
+        const checked = sa2.checked; $all('.pg-post').forEach(cb => cb.checked = checked);
+      }; }
       function syncMaster(groupSel, masterSel){
-        const allCbs = $all(groupSel); if(!allCbs.length) return;
+        const allCbs = $all(groupSel);
+        if(!allCbs.length) return;
         const master = $(masterSel); if(!master) return;
         const update = () => { master.checked = allCbs.every(cb => cb.checked); };
         allCbs.forEach(cb => cb.addEventListener('change', update));
@@ -416,12 +446,7 @@ INDEX_HTML = r"""<!doctype html>
       let senders = safeSenders(x);
       let openLink = x.link || '';
       if (openLink && openLink.startsWith('/')) { openLink = 'https://facebook.com' + openLink; }
-      return '<div class="conv-item" data-idx="'+i+'"><div><div><b>'+senders+
-        '</b> · <span class="conv-meta">'+(x.page_name||'')+
-        '</span></div><div class="conv-meta">'+(x.snippet||'')+
-        '</div></div><div class="right" style="min-width:180px">'+when+
-        '<br>'+badge+(openLink?('<div style="margin-top:4px"><a target="_blank" href="'+openLink+'">Mở trên Facebook</a></div>'):'')+
-        '</div></div>';
+      return '<div class="conv-item" data-idx="'+i+'">        <div>          <div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>          <div class="conv-meta">'+(x.snippet||'')+'</div>        </div>        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(openLink?('<div style="margin-top:4px"><a target="_blank" href="'+openLink+'">Mở trên Facebook</a></div>'):'')+'</div>      </div>';
     }).join('') || '<div class="muted">Không có hội thoại.</div>';
     st && (st.textContent = 'Tải ' + items.length + ' hội thoại.');
     const totalUnread = items.reduce((a,b)=>a+(b.unread_count||0),0);
@@ -465,7 +490,7 @@ INDEX_HTML = r"""<!doctype html>
         const who  = (m.from && m.from.name) ? m.from.name : '';
         const time = m.created_time ? new Date(m.created_time).toLocaleString('vi-VN') : '';
         const side = m.is_page ? 'right' : 'left';
-        return '<div style="display:flex;justify-content:'+(side==='right'?'flex-end':'flex-start')+';margin:6px 0"><div class="bubble '+(side==='right'?'right':'')+'"><div class="meta">'+(who||'')+(time?(' · '+time):'')+'</div><div>'+(m.message||'(media)')+'</div></div></div>';
+        return '<div style="display:flex;justify-content:'+(side==='right'?'flex-end':'flex-start')+';margin:6px 0">          <div class="bubble '+(side==='right'?'right':'')+'">            <div class="meta">'+(who||'')+(time?(' · '+time):'')+'</div>            <div>'+(m.message||'(media)')+'</div>          </div>        </div>';
       }).join('');
       box.scrollTop = box.scrollHeight;
       st && (st.textContent = 'Tải ' + msgs.length + ' tin nhắn');
@@ -510,7 +535,7 @@ INDEX_HTML = r"""<!doctype html>
     const prompt = ($('#ai_prompt')?.value||'').trim();
     const st = $('#post_status'); const pids = $all('.pg-post:checked').map(i=>i.value);
     if(!pids.length){ st.textContent='Chọn ít nhất 1 Page'; return; }
-    const page_id = pids[0] || null;
+    const page_id = pids[0] || null; // ưu tiên page đầu tiên
     st.textContent='Đang tạo bằng AI...';
     try{
       const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({page_id, prompt})});
@@ -547,6 +572,7 @@ INDEX_HTML = r"""<!doctype html>
       const r = await fetch('/api/pages/post', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
       const d = await r.json();
       if(d.error){ st.textContent = d.error; return; }
+      // Hiển thị link bài viết cho từng page
       const rows = (d.results||[]).map(x=>{
         const pg = x.page_id || '';
         const link = x.link || '';
@@ -623,6 +649,7 @@ INDEX_HTML = r"""<!doctype html>
 def index():
     return make_response(INDEX_HTML)
 
+
 # ------------------------ API: Pages ------------------------
 
 @app.route("/api/pages")
@@ -637,7 +664,8 @@ def api_pages():
         pages.append({"id": pid, "name": name})
     return jsonify({"data": pages})
 
-# ------------------------ Inbox ------------------------
+
+# ------------------------ API: Conversations ------------------------
 
 _CONV_CACHE = {}
 
@@ -695,6 +723,9 @@ def api_inbox_conversations():
     except Exception as e:
         return jsonify({"error": str(e)})
 
+
+# ------------------------ API: Messages of a conversation ------------------------
+
 @app.route("/api/inbox/messages")
 def api_inbox_messages():
     try:
@@ -708,6 +739,7 @@ def api_inbox_messages():
             token = list(PAGE_TOKENS.values())[0]
         else:
             return jsonify({"error": "Không có PAGE_TOKENS"})
+
         fields = "message,from,to,created_time,id"
         js = fb_get(f"{conv_id}/messages", {
             "access_token": token,
@@ -726,8 +758,16 @@ def api_inbox_messages():
     except Exception as e:
         return jsonify({"error": str(e)})
 
+
+# ------------------------ API: Reply to a conversation ------------------------
+
 @app.route("/api/inbox/reply", methods=["POST"])
 def api_inbox_reply():
+    """
+    Try two strategies:
+    1) POST /{conversation_id}/messages
+    2) If provided user_id + page_id, use Send API POST /me/messages
+    """
     try:
         js = request.get_json(force=True) or {}
         conv_id = js.get("conversation_id")
@@ -748,7 +788,7 @@ def api_inbox_reply():
                     "access_token": token,
                 })
                 return jsonify({"ok": True, "result": out})
-            except Exception:
+            except Exception as e:
                 if page_id and user_id:
                     token = get_page_token(page_id)
                     url = f"{FB_API}/me/messages"
@@ -768,8 +808,38 @@ def api_inbox_reply():
         if r.status_code >= 400 or "error" in data:
             raise RuntimeError(f"Send API failed: {data}")
         return jsonify({"ok": True, "result": data})
+
     except Exception as e:
         return jsonify({"error": str(e)})
+
+
+# ------------------------ Settings (keyword + source per page) ------------------------
+@app.route("/api/settings/get")
+def api_settings_get():
+    data = _load_settings()
+    pages = []
+    for pid, token in PAGE_TOKENS.items():
+        try:
+            info = fb_get(pid, {"access_token": token, "fields": "name"})
+            name = info.get("name", f"Page {pid}")
+        except Exception:
+            name = f"Page {pid}"
+        s = (data.get(pid) or {})
+        pages.append({"id": pid, "name": name, "keyword": s.get("keyword",""), "source": s.get("source","")})
+    return jsonify({"data": pages})
+
+@app.route("/api/settings/save", methods=["POST"])
+def api_settings_save():
+    js = request.get_json(force=True) or {}
+    items = js.get("items", [])
+    data = _load_settings()
+    for it in items:
+        pid = it.get("id")
+        if not pid: continue
+        data[pid] = {"keyword": it.get("keyword",""), "source": it.get("source","")}
+    _save_settings(data)
+    return jsonify({"ok": True})
+
 
 # ------------------------ Anti-dup helpers ------------------------
 
@@ -836,7 +906,7 @@ def _uniq_store(page_id: str, text: str):
     corpus[page_id] = bucket[:100]
     _uniq_save_corpus(corpus)
 
-# ---------- Hashtags ----------
+# ---------- Hashtags (mở rộng & đa dạng) ----------
 def _hashtags_for(keyword: str):
     base_kw = (keyword or "MB66").strip()
     kw_clean = re.sub(r"\s+", "", base_kw)
@@ -997,6 +1067,7 @@ QUY TẮC ĐA DẠNG:
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
+    """Simple local upload to /mnt/data or /tmp and return path for later"""
     f = request.files.get("file")
     if not f:
         return jsonify({"error":"Không có file"})
@@ -1006,15 +1077,22 @@ def api_upload():
         save_path = os.path.join(base, f.filename)
         f.save(save_path)
     except Exception:
+        # fallback /tmp if /mnt/data không khả dụng
         base = "/tmp"
         os.makedirs(base, exist_ok=True)
         save_path = os.path.join(base, f.filename)
         f.save(save_path)
     return jsonify({"ok": True, "path": save_path})
 
-# ------------------------ Permalink helpers ------------------------
+
+# ------------------------ Permalink helpers (NEW) ------------------------
 
 def _build_fallback_link(page_id: str, any_id: str) -> str:
+    """
+    Fallback tạo link đọc được:
+    - Nếu ID dạng {pageId}_{postId} -> https://www.facebook.com/{pageId}/posts/{postId}
+    - Ngược lại -> https://www.facebook.com/{any_id}
+    """
     try:
         if "_" in (any_id or ""):
             pid, postid = any_id.split("_", 1)
@@ -1024,26 +1102,42 @@ def _build_fallback_link(page_id: str, any_id: str) -> str:
         return f"https://www.facebook.com/{any_id or page_id}"
 
 def _resolve_permalink(page_id: str, token: str, api_result: dict) -> dict:
+    """
+    Cố gắng lấy permalink_url từ Graph.
+    Nếu không được, dựng fallback link.
+    Trả về {"permalink": <url>, "source_id": <id dùng để tra cứu>, "fallback": <url_fallback>}
+    """
     candidate_ids = []
     for key in ("id", "post_id", "video_id"):
         v = (api_result or {}).get(key)
         if v and v not in candidate_ids:
             candidate_ids.append(v)
+
     post_id = (api_result or {}).get("post_id")
     if post_id and post_id not in candidate_ids:
         candidate_ids.insert(0, post_id)
+
     for cid in candidate_ids:
         try:
             r = fb_get(str(cid), {"access_token": token, "fields": "permalink_url"})
             permalink = r.get("permalink_url")
             if permalink:
-                return {"permalink": permalink, "source_id": cid, "fallback": _build_fallback_link(page_id, cid)}
+                return {
+                    "permalink": permalink,
+                    "source_id": cid,
+                    "fallback": _build_fallback_link(page_id, cid)
+                }
         except Exception:
             continue
-    fallback_id = candidate_ids[0] if candidate_ids else (api_result.get("id") or page_id)
-    return {"permalink": _build_fallback_link(page_id, fallback_id), "source_id": fallback_id, "fallback": _build_fallback_link(page_id, fallback_id)}
 
-# ------------------------ Post to pages (returns permalink) ------------------------
+    fallback_id = candidate_ids[0] if candidate_ids else (api_result.get("id") or page_id)
+    return {
+        "permalink": _build_fallback_link(page_id, fallback_id),
+        "source_id": fallback_id,
+        "fallback": _build_fallback_link(page_id, fallback_id)
+    }
+
+# ------------------------ API: Post to pages (returns permalink) ------------------------
 
 @app.route("/api/pages/post", methods=["POST"])
 def api_pages_post():
@@ -1063,6 +1157,7 @@ def api_pages_post():
         results = []
         for pid in pages:
             token = get_page_token(pid)
+
             is_video = False
             if media_path:
                 lower = media_path.lower()
@@ -1072,10 +1167,12 @@ def api_pages_post():
                 is_video = any(ext in lower for ext in ['.mp4','.mov','.mkv','.avi','.webm'])
 
             try:
-                if media_path:
+                # --- POST nội dung ---
+                if media_path:  # local upload
                     if is_video:
                         with open(media_path, 'rb') as f:
-                            out = session.post(f"{FB_API}/{pid}/videos",
+                            out = session.post(
+                                f"{FB_API}/{pid}/videos",
                                 params={"access_token": token},
                                 files={"source": (os.path.basename(media_path), f)},
                                 data={"description": text_content},
@@ -1083,7 +1180,8 @@ def api_pages_post():
                             ).json()
                     else:
                         with open(media_path, 'rb') as f:
-                            out = session.post(f"{FB_API}/{pid}/photos",
+                            out = session.post(
+                                f"{FB_API}/{pid}/photos",
                                 params={"access_token": token},
                                 files={"source": (os.path.basename(media_path), f)},
                                 data={"caption": text_content},
@@ -1091,23 +1189,48 @@ def api_pages_post():
                             ).json()
                 elif media_url:
                     if is_video:
-                        out = fb_post(f"{pid}/videos", {"file_url": media_url, "description": text_content, "access_token": token})
+                        out = fb_post(f"{pid}/videos", {
+                            "file_url": media_url,
+                            "description": text_content,
+                            "access_token": token
+                        })
                     else:
-                        out = fb_post(f"{pid}/photos", {"url": media_url, "caption": text_content, "access_token": token})
+                        out = fb_post(f"{pid}/photos", {
+                            "url": media_url,
+                            "caption": text_content,
+                            "access_token": token
+                        })
                 else:
-                    out = fb_post(f"{pid}/feed", {"message": text_content, "access_token": token})
+                    # /feed thường trả id dạng {page_id}_{post_id}
+                    out = fb_post(f"{pid}/feed", {
+                        "message": text_content,
+                        "access_token": token
+                    })
 
+                # --- RÁNG LẤY PERMALINK ---
                 perm = _resolve_permalink(pid, token, out)
                 link = perm.get("permalink") or perm.get("fallback")
+
                 note = None
-                if post_type == 'reels' and not is_video:
-                    note = 'Reels yêu cầu video; đã đăng như Feed do không có video.'
-                results.append({"page_id": pid, "result": out, "link": link, "source_id": perm.get("source_id"), "note": note})
+                if post_type == 'reels':
+                    # Reels yêu cầu video; nếu không có video, đã fallback đăng Feed
+                    if not is_video:
+                        note = 'Reels yêu cầu video; đã đăng như Feed do không có video.'
+
+                results.append({
+                    "page_id": pid,
+                    "result": out,
+                    "link": link,
+                    "source_id": perm.get("source_id"),
+                    "note": note
+                })
             except Exception as e:
+                # Trong trường hợp lỗi nửa chừng, vẫn cố gắng dựng link fallback nếu có id
                 link = None
                 try:
-                    rid = (locals().get("out") or {}).get("id")
-                    if rid: link = _build_fallback_link(pid, rid)
+                    rid = (locals().get("out") or {}).get("id")  # nếu out tồn tại
+                    if rid:
+                        link = _build_fallback_link(pid, rid)
                 except Exception:
                     pass
                 results.append({"page_id": pid, "error": str(e), "link": link})
@@ -1115,8 +1238,8 @@ def api_pages_post():
     except Exception as e:
         return jsonify({"error": str(e)})
 
-# ------------------------ Minimal webhook & SSE ------------------------
 
+# ------------------------ Minimal webhook endpoints ------------------------
 @app.route("/webhook/events", methods=["GET","POST"])
 def webhook_events():
     if request.method == "GET":
@@ -1128,21 +1251,27 @@ def webhook_events():
         return Response("forbidden", status=403)
     return jsonify({"ok": True})
 
+
+# ------------------------ SSE (dummy) ------------------------
 @app.route("/stream/messages")
 def stream_messages():
     if DISABLE_SSE:
         return Response("SSE disabled", status=200, mimetype="text/plain")
+
     def gen():
         yield "retry: 15000\n\n"
         while True:
             time.sleep(15)
             yield "data: {}\n\n"
+
     return Response(gen(), mimetype="text/event-stream")
 
-# ------------------------ Settings CSV ------------------------
 
+# ------------------------ CSV Export/Import Settings ------------------------
 @app.route("/api/settings/export", endpoint="api_settings_export_v2")
 def api_settings_export_v2():
+    """Export current settings to CSV (id,name,keyword,source)."""
+    import csv
     from io import StringIO
     output = StringIO()
     writer = csv.writer(output)
@@ -1162,6 +1291,8 @@ def api_settings_export_v2():
 
 @app.route("/api/settings/import", methods=["POST"], endpoint="api_settings_import_v2")
 def api_settings_import_v2():
+    """Import settings from uploaded CSV with headers id,keyword,source (name optional)."""
+    import csv
     file = request.files.get("file")
     if not file:
         return jsonify({"error": "Thiếu file CSV"})
@@ -1185,65 +1316,9 @@ def api_settings_import_v2():
             count += 1
     _save_settings(data)
     return jsonify({"ok": True, "updated": count})
-@app.route("/api/settings/get")
-def api_settings_get():
-    """
-    Trả danh sách page để hiển thị ở tab Cài đặt:
-    [{id, name, keyword, source}]
-    """
-    try:
-        data = _load_settings()
-        rows = []
-        for pid, token in PAGE_TOKENS.items():
-            # lấy tên page (fallback nếu lỗi)
-            try:
-                info = fb_get(pid, {"access_token": token, "fields": "name"})
-                name = info.get("name", f"Page {pid}")
-            except Exception:
-                name = f"Page {pid}"
-            conf = data.get(pid) or {}
-            rows.append({
-                "id": pid,
-                "name": name,
-                "keyword": conf.get("keyword", ""),
-                "source": conf.get("source", "")
-            })
-        return jsonify({"data": rows})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-        @app.route("/api/settings/save", methods=["POST"])
-def api_settings_save():
-    """
-    Nhận payload: {"items":[{"id": "...", "keyword": "...", "source": "..."}]}
-    Lưu vào SETTINGS_FILE.
-    """
-    try:
-        js = request.get_json(force=True) or {}
-        items = js.get("items") or []
-        if not isinstance(items, list):
-            return jsonify({"error": "Payload không hợp lệ"}), 400
 
-        data = _load_settings()
-        updated = 0
-        for it in items:
-            pid = (it.get("id") or "").strip()
-            if not pid or pid not in PAGE_TOKENS:
-                continue  # chỉ lưu cho page mà mình có token
-            kw  = (it.get("keyword") or "").strip()
-            src = (it.get("source")  or "").strip()
-            if pid not in data:
-                data[pid] = {}
-            data[pid]["keyword"] = kw
-            data[pid]["source"]  = src
-            updated += 1
 
-        _save_settings(data)
-        return jsonify({"ok": True, "updated": updated})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ------------------------ Admin: corpus ------------------------
-
+# ------------------------ Admin helpers (reset/inspect corpus) ------------------------
 @app.route("/admin/corpus-info")
 def admin_corpus_info():
     key = request.args.get("key", "")
@@ -1271,20 +1346,7 @@ def admin_reset_corpus():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True)
-@app.route("/admin/reset-settings", methods=["POST", "GET"])
-def admin_reset_settings():
-    key = request.args.get("key", "")
-    if key != SECRET_KEY:
-        return jsonify({"error": "forbidden"}), 403
-    try:
-        removed = False
-        if os.path.exists(SETTINGS_FILE):
-            os.remove(SETTINGS_FILE)
-            removed = True
-        _save_settings({})  # tạo file rỗng hợp lệ
-        return jsonify({"ok": True, "removed": removed, "path": SETTINGS_FILE})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
