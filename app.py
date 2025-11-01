@@ -937,7 +937,6 @@ def _hashtags_for(keyword: str):
 _client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # ------------------------ AI Generate ------------------------
-
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
     js = request.get_json(force=True) or {}
