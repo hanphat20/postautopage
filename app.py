@@ -857,7 +857,7 @@ def _uniq_too_similar(candidate: str, history: list) -> bool:
         if not prev: continue
         j = _uniq_jaccard(candidate, prev, n=3)
         l = _uniq_lev_ratio(candidate, prev)
-        if j >= 0.25 or l >= 0.80:  # vượt một trong hai là coi giống (bài ngắn)
+        if j >= 0.35 or l >= 0.90:  # vượt một trong hai là coi giống (bài ngắn)
             return True
     return False
 
