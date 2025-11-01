@@ -3,11 +3,19 @@ import os
 import time
 import typing as t
 import csv
+import re
+import math
+import random
+import uuid
+from collections import Counter
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from flask import Flask, Response, jsonify, make_response, request
+
+# OpenAI (AI writer)
+from openai import OpenAI
 
 # ------------------------ Config / Tokens ------------------------
 
@@ -15,6 +23,10 @@ VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "1234")
 SECRET_KEY = os.getenv("SECRET_KEY", "changeme")
 TOKENS_FILE = os.getenv("TOKENS_FILE", "/etc/secrets/tokens.json")
 DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
+
+OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL    = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+CORPUS_FILE     = os.getenv("CORPUS_FILE", "/var/data/post_corpus.json")
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -80,6 +92,7 @@ def _save_settings(data: dict):
     _ensure_dir_for(SETTINGS_FILE)
     with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
 FB_CONNECT_TIMEOUT = float(os.getenv("FB_CONNECT_TIMEOUT", "5"))
 FB_READ_TIMEOUT    = float(os.getenv("FB_READ_TIMEOUT", "45"))
 FB_RETRIES         = int(os.getenv("FB_RETRIES", "3"))
@@ -123,9 +136,7 @@ def _load_tokens() -> dict:
         pass
     return {}
 
-
 PAGE_TOKENS = _load_tokens()
-
 
 def get_page_token(page_id: str) -> str:
     token = PAGE_TOKENS.get(page_id, "")
@@ -133,12 +144,10 @@ def get_page_token(page_id: str) -> str:
         raise RuntimeError(f"Không tìm thấy token cho page_id={page_id}")
     return token
 
-
 # ------------------------ Helpers to FB Graph ------------------------
 
 FB_VERSION = "v20.0"
 FB_API = f"https://graph.facebook.com/{FB_VERSION}"
-
 
 def fb_get(path: str, params: dict, timeout: int = 30) -> dict:
     url = f"{FB_API}/{path.lstrip('/')}"
@@ -151,7 +160,6 @@ def fb_get(path: str, params: dict, timeout: int = 30) -> dict:
         raise RuntimeError(f"FB GET {url} failed: {data}")
     return data
 
-
 def fb_post(path: str, data: dict, timeout: int = 30) -> dict:
     url = f"{FB_API}/{path.lstrip('/')}"
     r = session.post(url, data=data, timeout=(FB_CONNECT_TIMEOUT, FB_READ_TIMEOUT))
@@ -162,7 +170,6 @@ def fb_post(path: str, data: dict, timeout: int = 30) -> dict:
     if r.status_code >= 400 or "error" in js:
         raise RuntimeError(f"FB POST {url} failed: {js}")
     return js
-
 
 # ------------------------ Frontend ------------------------
 
@@ -478,12 +485,12 @@ INDEX_HTML = r"""<!doctype html>
   });
 
   // Đăng bài
-  // AI generate (tận dụng keyword/source đã lưu cho page)
+  // AI generate
   $('#btn_ai_generate')?.addEventListener('click', async ()=>{
     const prompt = ($('#ai_prompt')?.value||'').trim();
     const st = $('#post_status'); const pids = $all('.pg-post:checked').map(i=>i.value);
     if(!pids.length){ st.textContent='Chọn ít nhất 1 Page'; return; }
-    const page_id = pids[0] || null; // ưu tiên dùng key của page đầu tiên đang chọn
+    const page_id = pids[0] || null; // ưu tiên page đầu tiên
     st.textContent='Đang tạo bằng AI...';
     try{
       const r = await fetch('/api/ai/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({page_id, prompt})});
@@ -503,7 +510,7 @@ INDEX_HTML = r"""<!doctype html>
     return d;
   }
 
-  // Submit đăng bài (chỉ giữ 1 handler đầy đủ)
+  // Submit đăng bài
   $('#btn_post_submit')?.addEventListener('click', async ()=>{
     const pids = $all('.pg-post:checked').map(i=>i.value);
     const textVal = ($('#post_text')?.value||'').trim();
@@ -614,7 +621,6 @@ def api_pages():
 
 _CONV_CACHE = {}
 
-
 @app.route("/api/inbox/conversations")
 def api_inbox_conversations():
     try:
@@ -671,7 +677,6 @@ def api_inbox_conversations():
         return jsonify({"data": conversations})
     except Exception as e:
         return jsonify({"error": str(e)})
-
 
 
 # ------------------------ API: Messages of a conversation ------------------------
@@ -796,117 +801,203 @@ def api_settings_save():
     return jsonify({"ok": True})
 
 
-# ------------------------ API: AI generate from settings ------------------------
+# ------------------------ AI Generate (REPLACED) ------------------------
+# Short, varied, call-to-action oriented, "bạn" voice, with anti-dup checks
+
+def _uniq_load_corpus() -> dict:
+    try:
+        with open(CORPUS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _uniq_save_corpus(corpus: dict):
+    _ensure_dir_for(CORPUS_FILE)
+    with open(CORPUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(corpus, f, ensure_ascii=False, indent=2)
+
+def _uniq_norm(s: str) -> str:
+    s = re.sub(r"\s+", " ", (s or "").strip())
+    s = re.sub(r"[“”\"'`]+", "", s)
+    return s.lower()
+
+def _uniq_tok(s: str):
+    return re.findall(r"[a-zA-ZÀ-ỹ0-9]+", s.lower())
+
+def _uniq_ngrams(tokens, n=3):
+    return Counter([" ".join(tokens[i:i+n]) for i in range(max(0, len(tokens)-n+1))])
+
+def _uniq_jaccard(a: str, b: str, n=3) -> float:
+    ta, tb = _uniq_tok(a), _uniq_tok(b)
+    sa, sb = set(_uniq_ngrams(ta, n).keys()), set(_uniq_ngrams(tb, n).keys())
+    if not sa or not sb: return 0.0
+    inter, union = len(sa & sb), len(sa | sb)
+    return inter/union if union else 0.0
+
+def _uniq_lev_ratio(a: str, b: str) -> float:
+    # Levenshtein ratio gọn (approx) bằng edit distance động (O(n*m)).
+    A, B = a, b
+    if not A or not B: return 0.0
+    la, lb = len(A), len(B)
+    dp = list(range(lb+1))
+    for i in range(1, la+1):
+        prev, dp[0] = dp[0], i
+        for j in range(1, lb+1):
+            ins = dp[j-1] + 1
+            dele = dp[j] + 1
+            sub = prev + (0 if A[i-1] == B[j-1] else 1)
+            prev, dp[j] = dp[j], min(ins, dele, sub)
+    dist = dp[lb]
+    maxlen = max(1, la, lb)
+    return 1.0 - (dist / maxlen)
+
+def _uniq_too_similar(candidate: str, history: list) -> bool:
+    for it in (history or []):
+        prev = it.get("text","") or ""
+        if not prev: continue
+        j = _uniq_jaccard(candidate, prev, n=3)
+        l = _uniq_lev_ratio(candidate, prev)
+        if j >= 0.25 or l >= 0.80:  # vượt một trong hai là coi giống (bài ngắn)
+            return True
+    return False
+
+def _uniq_store(page_id: str, text: str):
+    corpus = _uniq_load_corpus()
+    bucket = corpus.get(page_id) or []
+    bucket.insert(0, {"text": _uniq_norm(text)})
+    corpus[page_id] = bucket[:100]
+    _uniq_save_corpus(corpus)
+
+def _hashtags_for(keyword: str):
+    base_kw = (keyword or "MB66").strip()
+    kw_clean = base_kw.replace(" ", "")
+    fixed = [
+        f"#{base_kw}",
+        f"#LinkChínhThức{kw_clean}",
+        f"#{kw_clean}AnToàn",
+        f"#HỗTrợLấyLạiTiền{kw_clean}",
+        f"#RútTiền{kw_clean}",
+        f"#MởKhóaTàiKhoản{kw_clean}",
+    ]
+    extra = [
+        "#ToolBaccarat", "#NoHu", "#ToolNoHu", "#HoTro24h", "#KhuyenMai",
+        "#RutTienNhanh", "#BaoMat", "#KhongBiChan", "#GameChinhChu",
+        "#ToolBaccaratNoHu", "#ToolGameAnToan", "#PhuongPhapChoi",
+        "#GameUyTin", "#CongCuChienThang"
+    ]
+    random.shuffle(extra)
+    mixed = fixed + extra[:random.randint(6,9)]
+    seen, out = set(), []
+    for t in mixed:
+        if t not in seen:
+            seen.add(t); out.append(t)
+    return " ".join(out)
+
+_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
+    """
+    Sinh bài NGẮN, xưng 'bạn', kêu gọi LIÊN HỆ, luôn khác nhau:
+    - Tập trung vấn đề người dùng: mất điểm, khoá TK, rút tiền, chặn link, tranh chấp...
+    - Chèn Tool dưới link chính.
+    - Hashtag cố định theo keyword + extra random.
+    - Chống trùng: Jaccard + Levenshtein, auto-regenerate.
+    """
     js = request.get_json(force=True) or {}
     page_id = js.get("page_id") or ""
-    prompt = (js.get("prompt") or "").strip()
+    user_prompt = (js.get("prompt") or "").strip()
+
     if not page_id:
-        return jsonify({"error": "Chưa chọn Page"})
+        return jsonify({"error": "Chưa chọn Page"}), 400
+    if _client is None:
+        return jsonify({"error": "Thiếu OPENAI_API_KEY (chưa cấu hình AI)"}), 400
+
     settings = _load_settings()
     conf = settings.get(page_id) or {}
     keyword = (conf.get("keyword") or "").strip()
-    source  = (conf.get("source") or "").strip()
-    if not keyword and not source:
-        return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"})
-    # helpers
-    import unicodedata, random, re
-    def no_accent(s: str) -> str:
-        return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
-    def sanitize_lines(text: str) -> list:
-        lines = []
-        for l in text.splitlines():
-            l = l.strip()
-            if not l: continue
-            l = re.sub(r'^[\\-\\u2022•▹]+', '', l).strip()
-            if l and l not in lines:
-                lines.append(l)
-        return lines
-    # Title
-    icons = ["🌟","☀️","💥","🔰","✨","🚀","🔥","🎯","✅","🔒"]
-    i1,i2 = random.sample(icons, 2)
-    key_up = (keyword or "").upper()
-    title = f"{i1} Truy Cập Link {key_up or 'CHÍNH THỨC'} – Không Bị Chặn {i2}"
-    # Body (supportive & assertive). If user provides prompt, weave it in.
-    openers = [
-        f"Truy cập đường dẫn chính thức của {keyword} để tránh trang giả mạo và đảm bảo an toàn cho tài khoản của bạn." if keyword else
-        "Truy cập đường dẫn chính thức để tránh trang giả mạo và đảm bảo an toàn cho tài khoản của bạn.",
-        f"Đây là link chính thức của {keyword} — vào nhanh, ổn định và được hỗ trợ 24/7." if keyword else
-        "Đây là link chính thức — vào nhanh, ổn định và được hỗ trợ 24/7.",
-        f"Sử dụng link chuẩn {keyword} để giao dịch mượt mà, bảo mật và hợp pháp." if keyword else
-        "Sử dụng link chuẩn để giao dịch mượt mà, bảo mật và hợp pháp."
-    ]
-    if prompt:
-        openers.append(f"{prompt} — chúng tôi sẵn sàng hỗ trợ bạn với trải nghiệm an toàn, hợp pháp và bảo mật.")
-    body_text = random.choice(openers)
-    # Important bullets
-    bullets_pool = [
-        "Hỗ trợ nạp không lên điểm: kiểm tra giao dịch và xử lý kịp thời.",
-        "Rút tiền không về/bị treo: tiếp nhận ưu tiên và đẩy nhanh xử lý.",
-        "Tài khoản bị khoá: hướng dẫn xác minh để mở khoá an toàn.",
-        "Hỗ trợ lấy lại tiền khi thao tác sai/sai link (nếu đủ điều kiện).",
-        "Khuyến mãi/ưu đãi thành viên được cập nhật thường xuyên.",
-        "Cam kết an toàn – bảo mật – hợp pháp; minh bạch quy trình.",
-        "Giao dịch đúng hướng dẫn: không mất thuế, không phát sinh phí ẩn."
-    ]
-    bullets = random.sample(bullets_pool, k=random.randint(4,6))
-    # Baccarat / nổ hũ (optional, if prompt mentions)
-    text_lower = prompt.lower()
-    include_baccarat = any(k in text_lower for k in ["baccarat", "bacarat", "nổ hũ", "no hu", "nohu"])
-    baccarat_note = []
-    baccarat_tags = []
-    if include_baccarat:
-        baccarat_note = [
-            "Mẹo tham khảo: quản lý vốn chặt chẽ, đặt giới hạn và dừng khi đạt mục tiêu.",
-            "Ưu tiên nhận diện xu hướng ngắn hạn, tránh cược theo cảm xúc.",
-            "Không có phương pháp hay công cụ nào đảm bảo thắng 100%; hãy chơi có trách nhiệm."
-        ]
-        baccarat_tags = ["#Baccarat","#Bacarat","#NoHu","#ToolBaccarat","#BatCau","#BatCauLongBao"]
-    # source/prompt lines
-    extras = []
-    if source:
-        extras.append(f"Link truy cập nhanh: {source}")
-    if prompt:
-        extras.append(f"Yêu cầu thêm: {prompt}")
-    # Contact
-    contact_block = "Thông tin liên hệ hỗ trợ:\\nSĐT: 0927395058\\nTelegram: @cattien999"
-    # Hashtags
-    nospace = (keyword or "").replace(" ", "")
-    nosign  = no_accent(nospace)
-    base_tags = [
-        f"#{keyword}" if keyword else "",
-        f"#LinkChínhThức{nospace}" if nospace else "",
-        f"#{nospace}AnToàn" if nospace else "",
-        f"#HỗTrợLấyLạiTiền{nospace}" if nospace else "",
-        f"#RútTiền{nospace}" if nospace else "",
-        f"#MởKhóaTàiKhoản{nospace}" if nospace else "",
-    ]
-    extra_pool = ["UyTin","BaoMat","KhongBiChan","NapTien","RutTienNhanh","HoTro24h","KhuyenMai","DangKyNhanh","LinkChinhChu","KhachHang","TocDoCao"]
-    extra_tags = [f"#{nosign}{t}" for t in random.sample(extra_pool, k=4 if len(extra_pool)>=4 else len(extra_pool))] if nosign else []
-    tags = " ".join([t for t in (base_tags + extra_tags + baccarat_tags) if t])
-    # Assemble
-    lines = [title, f"#{keyword} ➡ {source}".rstrip() if keyword else (source or ""), "", body_text, "", "Thông tin quan trọng:", ""]
-    for b in bullets:
-        lines.append(f"- {b}")
-    if baccarat_note:
-        lines.append("")
-        lines.append("Lưu ý chơi (tham khảo):")
-        for x in baccarat_note:
-            lines.append(f"- {x}")
-    if extras:
-        lines.append("")
-        lines.extend(extras)
-    lines.append("")
-    lines.append(contact_block.replace("\\n", "\n"))
-    lines.append("")
-    lines.append("⚠️ Lưu ý: Chơi có trách nhiệm — không có chiến lược hay công cụ nào đảm bảo thắng 100%.")
-    lines.append("")
-    if tags:
-        lines.append("Hashtags:")
-        lines.append(tags)
-    text = "\n".join(lines).strip()
-    return jsonify({"text": text})
+    source  = (conf.get("source")  or "").strip()
+
+    if not (keyword or source):
+        return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"}), 400
+
+    giveaway_link = "https://sites.google.com/view/toolbacarat-nohu/"
+    hashtags_hint = _hashtags_for(keyword)
+
+    # Muối ngẫu nhiên để đa dạng hoá
+    salt_style = random.choice(["năng động", "ấm áp", "quyết đoán", "tinh gọn", "thân thiện"])
+    salt_cta   = random.choice(["Liên hệ ngay", "Nhắn ngay", "Gọi ngay", "Kết nối ngay", "Trao đổi ngay"])
+    salt_id    = uuid.uuid4().hex[:8]
+
+    system_msg = (
+        "Bạn là copywriter tiếng Việt. Viết ngắn gọn, tự nhiên, xưng 'bạn', "
+        "đánh trúng nhu cầu và thúc đẩy liên hệ. Không đạo văn; diễn đạt mới."
+    )
+
+    user_msg = f"""
+(độ dài ngắn gọn; {salt_style}; id:{salt_id})
+Nhiệm vụ: Viết post Facebook NGẮN, xưng 'bạn', tập trung VẤN ĐỀ NGƯỜI CHƠI và KÊU GỌI LIÊN HỆ.
+KHÔNG hướng dẫn quy trình chi tiết; chỉ nêu cam kết, lợi ích và lời kêu gọi.
+
+DỮ LIỆU
+- keyword: {keyword or "(trống)"}
+- source: {source or "(trống)"}
+- prompt thêm: {user_prompt or "(trống)"}
+
+CẤU TRÚC BẮT BUỘC (ngắn gọn):
+1) Tiêu đề 1 dòng (1 emoji vừa phải), nêu rõ hỗ trợ & tốc độ
+2) Dòng link chính (in ra nếu có): {source or "(trống)"}
+3) "Tặng phương pháp & Tool hỗ trợ người chơi:" + {giveaway_link}
+4) 1–2 câu mở ngắn (nêu đúng vấn đề bạn GẶP và cam kết xử lý)
+5) "Thông tin quan trọng:" 3 gạch đầu dòng ngắn (hỗ trợ 24/7; bảo mật; link chính chủ)
+6) 1 dòng tổng hợp vấn đề: "Bạn gặp: mất điểm • khoá tài khoản • rút tiền • bị chặn link • tranh chấp?"
+   → kết bằng CTA mạnh: "{salt_cta} qua hotline/Telegram để được ưu tiên hỗ trợ."
+7) "Liên hệ hỗ trợ:" 2 dòng:
+   - 0927395058
+   - Telegram: @cattien999
+8) Cảnh báo 1 dòng: Chơi có trách nhiệm…
+9) "Hashtags:" + 1 dòng hashtag (dùng các hashtag sau, không bỏ bớt): {hashtags_hint}
+
+YÊU CẦU:
+- RÕ, NGẮN, DỄ HÀNH ĐỘNG. Không dài dòng; không kể lể quy trình.
+- Xưng 'bạn' xuyên suốt; không dùng 'khách'.
+- Không thêm ghi chú ngoài nội dung post.
+""".strip()
+
+    MAX_TRIES = 5
+    corpus = _uniq_load_corpus()
+    history = corpus.get(page_id) or []
+    last_err = None
+
+    try:
+        for _ in range(MAX_TRIES):
+            resp = _client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[{"role":"system","content":system_msg},
+                          {"role":"user","content":user_msg}],
+                temperature=0.98,
+                top_p=0.95,
+                max_tokens=420,
+                presence_penalty=0.7,
+                frequency_penalty=0.6
+            )
+            text = (resp.choices[0].message.content or "").strip()
+            lines = [re.sub(r"\s+$","",ln) for ln in text.splitlines()]
+            text = "\n".join(lines).strip()
+
+            if _uniq_too_similar(_uniq_norm(text), history):
+                last_err = {"reason":"similar"}
+                continue
+
+            _uniq_store(page_id, text)
+            return jsonify({"text": text, "checks": {"similarity": "pass"}})
+    except Exception as e:
+        last_err = {"error": str(e)}
+
+    return jsonify({"error":"Không thể tạo bài đủ khác biệt, hãy thử lại.", "detail": last_err}), 409
+
+
+# ------------------------ Upload Media ------------------------
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
@@ -976,7 +1067,7 @@ def api_pages_post():
                     # text only
                     out = fb_post(f"{pid}/feed", {"message": text_content, "access_token": token})
 
-                # NOTE: Facebook Reels for Pages API có thể khác; nếu chọn reels nhưng chúng ta đăng video qua /videos, trả kèm note
+                # NOTE: Facebook Reels for Pages API có thể khác; nếu chọn reels nhưng không có video, báo note
                 note = None
                 if post_type == 'reels' and not is_video:
                     note = 'Reels yêu cầu video; đã đăng như Feed do không có video.'
