@@ -30,7 +30,7 @@ ANTI_DUP_ENABLED = os.getenv("ANTI_DUP_ENABLED", "1") not in ("0","false","False
 DUP_J_THRESHOLD  = float(os.getenv("DUP_J", "0.35"))
 DUP_L_THRESHOLD  = float(os.getenv("DUP_L", "0.90"))
 MAX_TRIES_ENV    = int(os.getenv("MAX_TRIES", "5"))
-CORPUS_FILE     = os.getenv("CORPUS_FILE", "/var/data/post_corpus.json")
+CORPUS_FILE = os.getenv("CORPUS_FILE", "/mnt/data/post_corpus.json")
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
