@@ -159,6 +159,70 @@ def fb_post(path: str, data: dict, timeout: int = 30) -> dict:
         raise RuntimeError(f"FB POST {url} failed: {js}")
     return js
 
+# ------------------------ Emoji & helpers (NEW) ------------------------
+
+EMOJI_HEADLINE = ["🔗","🛡️","✅","🚀","📌","🎯","✨"]
+EMOJI_HASHTAG  = ["🏷️","🔖","🧾","📎"]
+EMOJI_GIFT     = ["🎁","🧰","🪄","🧲","🧠"]
+
+EMOJI_BULLETS = ["✅","🔐","⚡","🛡️","⏱️","📞","💬","🧩","🚀","📌","🧠","💡"]
+EMOJI_INLINE  = ["✨","🔥","💪","🤝","⚠️","📣","📈","🧭","🛠️","🎯","🔁","🔎","💼","🏁"]
+
+def _pick(lst, n=1, allow_dup=False):
+    if not lst: return []
+    if allow_dup:
+        return [random.choice(lst) for _ in range(n)]
+    cp = lst[:]
+    random.shuffle(cp)
+    return cp[:min(n, len(cp))]
+
+def _decorate_emojis(text: str) -> str:
+    """
+    - Giữ nguyên 3 dòng đầu (đã chèn icon khi dựng).
+    - Thêm 1–2 emoji nhẹ cho thân bài (sau dòng 3).
+    - Thay bullet '- ' bằng emoji bullets trong mục 'Thông tin quan trọng:'.
+    """
+    lines = text.splitlines()
+    if len(lines) <= 3:
+        return text
+
+    # 1) Thân bài: chèn 1–2 emoji cuối câu
+    body_start, body_end = 3, len(lines)
+    for i in range(3, len(lines)):
+        if "Thông tin quan trọng" in lines[i]:
+            body_end = i
+            break
+    inline_emojis = _pick(EMOJI_INLINE, n=2)
+    added = 0
+    for i in range(body_start, body_end):
+        ln = lines[i].strip()
+        if not ln or ln.startswith("-") or ln.endswith((":", "…", "...")):
+            continue
+        if added < len(inline_emojis):
+            lines[i] = lines[i] + " " + inline_emojis[added]
+            added += 1
+
+    # 2) Bullets: đổi '- ' -> '<emoji> '
+    in_bullets = False
+    for i in range(3, len(lines)):
+        s = lines[i].strip()
+        if "Thông tin quan trọng" in s:
+            in_bullets = True
+            continue
+        if in_bullets:
+            if s.startswith("- "):
+                rest = s[2:].lstrip()
+                # nếu đã có emoji, bỏ qua
+                if rest and not (rest[0].isascii() and rest[0].isalnum()):
+                    continue
+                emo = _pick(EMOJI_BULLETS, 1)[0]
+                lines[i] = lines[i].replace("- ", f"{emo} ", 1)
+            else:
+                if s == "" or not s.startswith("-"):
+                    in_bullets = False
+
+    return "\n".join(lines)
+
 # ------------------------ Frontend ------------------------
 
 INDEX_HTML = r"""<!doctype html>
@@ -768,7 +832,7 @@ def api_settings_save():
     return jsonify({"ok": True})
 
 
-# ------------------------ AI Generate ------------------------
+# ------------------------ Anti-dup helpers ------------------------
 
 def _uniq_load_corpus() -> dict:
     try:
@@ -833,40 +897,46 @@ def _uniq_store(page_id: str, text: str):
     corpus[page_id] = bucket[:100]
     _uniq_save_corpus(corpus)
 
+# ---------- Hashtags (mở rộng & đa dạng) ----------
 def _hashtags_for(keyword: str):
     base_kw = (keyword or "MB66").strip()
-    kw_clean = base_kw.replace(" ", "")
-    fixed = [
+    kw_clean = re.sub(r"\s+", "", base_kw)
+    kw_upper = kw_clean.upper()
+
+    core = [
         f"#{base_kw}",
+        f"#{kw_upper}",
         f"#LinkChínhThức{kw_clean}",
         f"#{kw_clean}AnToàn",
         f"#HỗTrợLấyLạiTiền{kw_clean}",
         f"#RútTiền{kw_clean}",
         f"#MởKhóaTàiKhoản{kw_clean}",
     ]
-    extra = [
-        "#ToolBaccarat", "#NoHu", "#ToolNoHu", "#HoTro24h", "#KhuyenMai",
-        "#RutTienNhanh", "#BaoMat", "#KhongBiChan", "#GameChinhChu",
-        "#ToolBaccaratNoHu", "#ToolGameAnToan", "#PhuongPhapChoi",
-        "#GameUyTin", "#CongCuChienThang"
+    topical = [
+        "#UyTinChinhChu","#HoTroNhanh","#CSKH24h","#KhongBiChan","#LinkChuan2025",
+        "#ToolGame","#ToolHieuQua","#TuVanMienPhi","#BaoMatCao","#AnToanThongTin",
+        "#RutTienThanhCong","#MoKhoaTaiKhoan","#KhieuNaiTranhChap","#HoanTien",
+        "#NoHu","#ToolNoHu","#ToolBaccarat","#ToolBaccaratNoHu","#GameChinhChu",
+        "#GameUyTin","#CongCuChienThang","#KinhNghiemChoi","#LoiIchNguoiChoi",
+        "#RutTienNhanh","#BaoMat","#TrangThaiRanhMach","#UpdateTienDo"
     ]
-    random.shuffle(extra)
-    mixed = fixed + extra[:random.randint(6,9)]
-    seen, out = set(), []
-    for t in mixed:
-        if t not in seen:
-            seen.add(t); out.append(t)
+    random.shuffle(topical)
+    picked = topical[:random.randint(10, 14)]
+    out = list(dict.fromkeys(core + picked))
     return " ".join(out)
 
 _client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
+# ------------------------ AI Generate ------------------------
+
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
     """
-    Sinh bài NGẮN, xưng 'bạn', kêu gọi LIÊN HỆ, với 3 dòng đầu chuẩn hoá:
-    1) Khẳng định link chính thức/không bị chặn/chuẩn 2025/an toàn/chính xác
-    2) "#<keyword> ==> <source>"
-    3) "Tặng phương pháp & Tool hỗ trợ người chơi: <giveaway_link>"
+    Sinh bài NGẮN, xưng 'bạn', với 3 dòng đầu có icon linh hoạt:
+    1) Headline: khẳng định link/chống chặn/chuẩn 2025/an toàn/chính xác (có emoji đầu dòng)
+    2) Hashtag dòng: "#<keyword> ==> <source>" (có emoji đầu dòng)
+    3) Gift line: "Tặng phương pháp & Tool..." (có emoji đầu dòng)
+    Thân bài 110–180 từ, emoji nhẹ; bullet info; hashtag mở rộng.
     Chống trùng bằng Jaccard + Levenshtein; auto-regenerate.
     """
     js = request.get_json(force=True) or {}
@@ -893,53 +963,39 @@ def api_ai_generate():
     salt_cta   = random.choice(["Liên hệ ngay", "Nhắn ngay", "Gọi ngay", "Kết nối ngay", "Trao đổi ngay"])
     salt_id    = uuid.uuid4().hex[:8]
 
-    # ✅ Dòng 1 chọn ngẫu nhiên để đa dạng
-    headline_variants = [
-        "Link chính thức – không bị chặn, chuẩn 2025, an toàn & chính xác.",
-        "Link chính thức 2025 – không bị chặn, truy cập an toàn.",
-        "Link chuẩn 2025 – chính xác, an toàn, truy cập ổn định.",
-        "Link chính thức – an toàn, chính xác, hoạt động ổn định 2025.",
-        "Link chuẩn – không bị chặn, đúng bản 2025."
-    ]
-    headline_line = random.choice(headline_variants)
-
-    # ✅ Dòng 2 theo keyword từng page
-    keyword_tag = (keyword or "toolgame").strip().replace(" ", "").lower()
-    keyword_tag_line = f"#{keyword_tag} ==> {source or '(chưa cấu hình)'}"
-
     system_msg = (
         "Bạn là copywriter tiếng Việt. Viết ngắn gọn, tự nhiên, xưng 'bạn', "
         "đánh trúng nhu cầu và thúc đẩy liên hệ. Không đạo văn; diễn đạt mới."
     )
 
+    keyword_tag = (keyword or "toolgame").strip().replace(" ", "").lower()
+
     user_msg = f"""
 (độ dài ngắn gọn; {salt_style}; id:{salt_id})
-Nhiệm vụ: Viết post Facebook NGẮN, xưng 'bạn', tập trung VẤN ĐỀ NGƯỜI CHƠI và KÊU GỌI LIÊN HỆ.
-KHÔNG hướng dẫn quy trình chi tiết; chỉ nêu cam kết, lợi ích và lời kêu gọi.
+Nhiệm vụ: Viết post Facebook NGẮN, xưng 'bạn', bám đúng ý nghĩa: hỗ trợ xử lý mất điểm/khoá TK/chặn link, hướng dẫn khiếu nại đúng quy trình, theo sát đến khi xong; bảo mật; ưu tiên ca gấp.
 
 DỮ LIỆU
 - keyword: {keyword or "(trống)"}
 - source: {source or "(trống)"}
 - prompt thêm: {user_prompt or "(trống)"}
 
-CẤU TRÚC BẮT BUỘC (ngắn gọn):
-1) Dòng 1: Một câu khẳng định link chính thức/không bị chặn/chuẩn 2025/an toàn/chính xác (không emoji).
-2) Dòng 2: "{keyword_tag_line}"
-3) Dòng 3: "Tặng phương pháp & Tool hỗ trợ người chơi: {giveaway_link}"
-4) 1–2 câu mở ngắn (nêu đúng vấn đề bạn GẶP và cam kết xử lý)
-5) "Thông tin quan trọng:" 3 gạch đầu dòng ngắn (hỗ trợ 24/7; bảo mật; link chính chủ)
-6) 1 dòng tổng hợp vấn đề: "Bạn gặp: mất điểm • khoá tài khoản • rút tiền • bị chặn link • tranh chấp?"
-   → kết bằng CTA mạnh: "{salt_cta} qua hotline/Telegram để được ưu tiên hỗ trợ."
+CẤU TRÚC BẮT BUỘC:
+1) Dòng 1: Câu khẳng định link chính thức/không bị chặn/chuẩn 2025/an toàn/chính xác (CHO PHÉP emoji đầu dòng).
+2) Dòng 2: Dạng: "#{keyword_tag} ==> {source or '(chưa cấu hình)'}" (CHO PHÉP 1 emoji đầu dòng).
+3) Dòng 3: Dạng: "Tặng phương pháp & Tool hỗ trợ người chơi: {giveaway_link}" (CHO PHÉP 1 emoji đầu dòng).
+4) THÂN BÀI: 110–180 từ (4–8 dòng), linh hoạt từ ngữ/nhịp câu; có thể dùng 1–3 emoji NHẸ trong thân bài; tránh lặp y nguyên các cụm từ ở lần trước.
+5) Tiêu đề "Thông tin quan trọng:" rồi 3–5 bullet ngắn, chọn linh hoạt từ pool: (hỗ trợ 24/7; bảo mật; link chính chủ/ổn định; xử lý nhanh/ưu tiên hồ sơ; theo sát đến khi hoàn tất; tư vấn miễn phí). Bullet có thể có emoji.
+6) 1 dòng tổng hợp vấn đề: "Bạn gặp: mất điểm • khoá tài khoản • rút tiền • bị chặn link • tranh chấp?" + CTA: "{salt_cta} qua hotline/Telegram để được ưu tiên hỗ trợ."
 7) "Liên hệ hỗ trợ:" 2 dòng:
    - 0927395058
    - Telegram: @cattien999
-8) Cảnh báo 1 dòng: Chơi có trách nhiệm…
-9) "Hashtags:" + 1 dòng hashtag (dùng các hashtag sau, không bỏ bớt): {hashtags_hint}
+8) 1 dòng cảnh báo: Chơi có trách nhiệm…
+9) "Hashtags:" + 1 dòng gồm danh sách hashtag: {hashtags_hint}
 
-YÊU CẦU:
-- RÕ, NGẮN, DỄ HÀNH ĐỘNG. Không dài dòng; không kể lể quy trình.
-- Xưng 'bạn' xuyên suốt; không dùng 'khách'.
-- TUÂN THỦ CHÍNH XÁC 3 DÒNG ĐẦU.
+QUY TẮC ĐA DẠNG:
+- Diễn đạt tự nhiên; đảo trật tự mệnh đề, thay đồng nghĩa, lược bớt/nhấn mạnh tuỳ cảnh.
+- Không sao chép 100% một bản trước đó; ưu tiên biến hoá cụm từ.
+- Không dùng emoji ở cuối 3 dòng đầu (emoji đặt đầu dòng đã đủ).
 """.strip()
 
     MAX_TRIES = MAX_TRIES_ENV
@@ -953,22 +1009,41 @@ YÊU CẦU:
                 model=OPENAI_MODEL,
                 messages=[{"role":"system","content":system_msg},
                           {"role":"user","content":user_msg}],
-                temperature=0.98,
+                temperature=1.05,
                 top_p=0.95,
-                max_tokens=420,
-                presence_penalty=0.7,
-                frequency_penalty=0.6
+                max_tokens=440,
+                presence_penalty=0.9,
+                frequency_penalty=0.7
             )
             text = (resp.choices[0].message.content or "").strip()
             lines = [re.sub(r"\s+$","",ln) for ln in text.splitlines()]
 
-            # ✅ ÉP 3 DÒNG ĐẦU cho chắc chắn đúng format yêu cầu
+            # ---------- Ghim 3 dòng đầu với icon linh hoạt ----------
+            icon_head  = _pick(EMOJI_HEADLINE, 1)[0]
+            icon_hash  = _pick(EMOJI_HASHTAG, 1)[0]
+            icon_gift  = _pick(EMOJI_GIFT, 1)[0]
+
+            headline_variants = [
+                "Link chính thức – không bị chặn, chuẩn 2025, an toàn & chính xác.",
+                "Link chính thức 2025 – không bị chặn, truy cập an toàn.",
+                "Link chuẩn 2025 – chính xác, an toàn, truy cập ổn định.",
+                "Link chính thức – an toàn, chính xác, hoạt động ổn định 2025.",
+                "Link chuẩn – không bị chặn, đúng bản 2025."
+            ]
+            headline_line = f"{icon_head} " + random.choice(headline_variants)
+
+            keyword_tag_line = f"{icon_hash} #{keyword_tag} ==> {source or '(chưa cấu hình)'}"
+            gift_line = f"{icon_gift} Tặng phương pháp & Tool hỗ trợ người chơi: {giveaway_link}"
+
             if len(lines) < 3:
                 lines += [""] * (3 - len(lines))
             lines[0] = headline_line
             lines[1] = keyword_tag_line
-            lines[2] = f"Tặng phương pháp & Tool hỗ trợ người chơi: {giveaway_link}"
+            lines[2] = gift_line
             text = "\n".join(lines).strip()
+
+            # ---------- Rải emoji thân bài & bullets ----------
+            text = _decorate_emojis(text)
 
             # Anti-dup
             if ANTI_DUP_ENABLED and _uniq_too_similar(_uniq_norm(text), history):
