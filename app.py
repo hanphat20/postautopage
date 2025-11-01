@@ -1185,6 +1185,62 @@ def api_settings_import_v2():
             count += 1
     _save_settings(data)
     return jsonify({"ok": True, "updated": count})
+@app.route("/api/settings/get")
+def api_settings_get():
+    """
+    Trả danh sách page để hiển thị ở tab Cài đặt:
+    [{id, name, keyword, source}]
+    """
+    try:
+        data = _load_settings()
+        rows = []
+        for pid, token in PAGE_TOKENS.items():
+            # lấy tên page (fallback nếu lỗi)
+            try:
+                info = fb_get(pid, {"access_token": token, "fields": "name"})
+                name = info.get("name", f"Page {pid}")
+            except Exception:
+                name = f"Page {pid}"
+            conf = data.get(pid) or {}
+            rows.append({
+                "id": pid,
+                "name": name,
+                "keyword": conf.get("keyword", ""),
+                "source": conf.get("source", "")
+            })
+        return jsonify({"data": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+        @app.route("/api/settings/save", methods=["POST"])
+def api_settings_save():
+    """
+    Nhận payload: {"items":[{"id": "...", "keyword": "...", "source": "..."}]}
+    Lưu vào SETTINGS_FILE.
+    """
+    try:
+        js = request.get_json(force=True) or {}
+        items = js.get("items") or []
+        if not isinstance(items, list):
+            return jsonify({"error": "Payload không hợp lệ"}), 400
+
+        data = _load_settings()
+        updated = 0
+        for it in items:
+            pid = (it.get("id") or "").strip()
+            if not pid or pid not in PAGE_TOKENS:
+                continue  # chỉ lưu cho page mà mình có token
+            kw  = (it.get("keyword") or "").strip()
+            src = (it.get("source")  or "").strip()
+            if pid not in data:
+                data[pid] = {}
+            data[pid]["keyword"] = kw
+            data[pid]["source"]  = src
+            updated += 1
+
+        _save_settings(data)
+        return jsonify({"ok": True, "updated": updated})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ------------------------ Admin: corpus ------------------------
 
