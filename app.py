@@ -1127,6 +1127,51 @@ def stream_messages():
             yield "data: {}\n\n"
     return Response(gen(), mimetype="text/event-stream")
 
+
+# ------------------------ Settings Get/Save ------------------------
+
+@app.route("/api/settings/get")
+def api_settings_get():
+    try:
+        data = _load_settings()
+        rows = []
+        for pid, token in PAGE_TOKENS.items():
+            try:
+                info = fb_get(pid, {"access_token": token, "fields": "name"})
+                name = info.get("name", f"Page {pid}")
+            except Exception:
+                name = f"Page {pid}"
+            conf = data.get(pid) or {}
+            rows.append({"id": pid, "name": name, "keyword": conf.get("keyword", ""), "source": conf.get("source", "")})
+        return jsonify({"data": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route("/api/settings/save", methods=["POST"])
+def api_settings_save():
+    try:
+        js = request.get_json(force=True) or {}
+        items = js.get("items") or []
+        if not isinstance(items, list):
+            return jsonify({"error": "payload không hợp lệ"}), 400
+        data = _load_settings()
+        updated = 0
+        for it in items:
+            pid = (it.get("id") or "").strip()
+            if not pid or pid not in PAGE_TOKENS:
+                continue
+            kw = (it.get("keyword") or "").strip()
+            src = (it.get("source") or "").strip()
+            if pid not in data:
+                data[pid] = {}
+            data[pid]["keyword"] = kw
+            data[pid]["source"]  = src
+            updated += 1
+        _save_settings(data)
+        return jsonify({"ok": True, "updated": updated})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
 # ------------------------ Settings CSV ------------------------
 
 @app.route("/api/settings/export", endpoint="api_settings_export_v2")
