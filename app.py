@@ -46,26 +46,38 @@ app.secret_key = SECRET_KEY
 SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/tmp/page_settings.json')
 
 def _load_settings():
+    """
+    Load page settings JSON. Returns dict.
+    Tự phục hồi khi file tồn tại nhưng JSON hỏng (trả {}).
+    Nếu không có, thử bootstrap từ settings.csv (nếu có).
+    """
     try:
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            return json.load(f) or {}
     except FileNotFoundError:
         pass
+    except Exception:
+        # JSON hỏng hoặc quyền đọc lỗi -> fallback rỗng
+        return {}
+
     data = {}
     if os.path.exists('settings.csv'):
-        with open('settings.csv', newline='', encoding='utf-8') as f:
-            rdr = csv.DictReader(f)
-            for row in rdr:
-                pid = (row.get('id') or '').strip()
-                if not pid:
-                    continue
-                data[pid] = {
-                    "keyword": (row.get('keyword') or row.get('keywords') or '').strip(),
-                    "source":  (row.get('source')  or row.get('link')     or '').strip(),
-                }
-        _save_settings(data)
-        return data
-    return {}
+        try:
+            with open('settings.csv', newline='', encoding='utf-8') as f:
+                rdr = csv.DictReader(f)
+                for row in rdr:
+                    pid = (row.get('id') or '').strip()
+                    if not pid:
+                        continue
+                    data[pid] = {
+                        "keyword": (row.get('keyword') or row.get('keywords') or '').strip(),
+                        "source":  (row.get('source')  or row.get('link')     or '').strip(),
+                    }
+            _save_settings(data)
+        except Exception:
+            # Nếu CSV lỗi, vẫn trả data rỗng để UI hoạt động
+            data = {}
+    return data
 
 def _ensure_dir_for(path: str):
     d = os.path.dirname(path)
@@ -1206,3 +1218,17 @@ def admin_reset_corpus():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True)
+@app.route("/admin/reset-settings", methods=["POST", "GET"])
+def admin_reset_settings():
+    key = request.args.get("key", "")
+    if key != SECRET_KEY:
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        removed = False
+        if os.path.exists(SETTINGS_FILE):
+            os.remove(SETTINGS_FILE)
+            removed = True
+        _save_settings({})  # tạo file rỗng hợp lệ
+        return jsonify({"ok": True, "removed": removed, "path": SETTINGS_FILE})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
