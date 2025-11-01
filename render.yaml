@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: mb66-support-app
+    env: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app -k gthread --threads 8 --timeout 120
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false   # set this in Render Dashboard as a Secret
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: CORPUS_FILE
+        value: /var/data/post_corpus.json
+      - key: WEBHOOK_VERIFY_TOKEN
+        value: "1234"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DISABLE_SSE
+        value: "1"
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
