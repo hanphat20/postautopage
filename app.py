@@ -357,7 +357,7 @@ INDEX_HTML = r"""<!doctype html>
         if(!allCbs.length) return;
         const master = $(masterSel); if(!master) return;
         const update = () => { master.checked = allCbs.every(cb => cb.checked); };
-        allCbs.forEach(cb => cb.addEventListener('change', update));
+        allCbs.forEach(cb => addEventListener('change', update));
         update();
       }
       syncMaster('.pg-inbox', '#inbox_select_all');
@@ -851,15 +851,21 @@ def _uniq_lev_ratio(a: str, b: str) -> float:
     maxlen = max(1, la, lb)
     return 1.0 - (dist / maxlen)
 
+# 🔁 CHANGED: chỉ so sánh với 1 bài gần nhất thay vì toàn bộ lịch sử
 def _uniq_too_similar(candidate: str, history: list) -> bool:
-    for it in (history or []):
-        prev = it.get("text","") or ""
-        if not prev: continue
-        j = _uniq_jaccard(candidate, prev, n=3)
-        l = _uniq_lev_ratio(candidate, prev)
-        if j >= 0.35 or l >= 0.90:  # vượt một trong hai là coi giống (bài ngắn)
-            return True
-    return False
+    """
+    Return True nếu candidate quá giống với BÀI GẦN NHẤT trong history.
+    History được lưu với bài mới nhất ở đầu (index 0).
+    """
+    if not history:
+        return False
+    last = history[0].get("text", "") or ""
+    if not last:
+        return False
+    j = _uniq_jaccard(candidate, last, n=3)
+    l = _uniq_lev_ratio(candidate, last)
+    # Giữ nguyên ngưỡng: giống nếu Jaccard >= 0.35 hoặc Levenshtein >= 0.90
+    return (j >= 0.35 or l >= 0.90)
 
 def _uniq_store(page_id: str, text: str):
     corpus = _uniq_load_corpus()
