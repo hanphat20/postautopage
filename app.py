@@ -26,6 +26,10 @@ DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
 
 OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL    = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+ANTI_DUP_ENABLED = os.getenv("ANTI_DUP_ENABLED", "1") not in ("0","false","False")
+DUP_J_THRESHOLD  = float(os.getenv("DUP_J", "0.35"))
+DUP_L_THRESHOLD  = float(os.getenv("DUP_L", "0.90"))
+MAX_TRIES_ENV    = int(os.getenv("MAX_TRIES", "5"))
 CORPUS_FILE     = os.getenv("CORPUS_FILE", "/var/data/post_corpus.json")
 
 app = Flask(__name__)
@@ -863,7 +867,7 @@ def _uniq_too_similar(candidate: str, history: list) -> bool:
         return False
     j = _uniq_jaccard(candidate, last, n=3)
     l = _uniq_lev_ratio(candidate, last)
-    return (j >= 0.35 or l >= 0.90)
+    return (j >= DUP_J_THRESHOLD or l >= DUP_L_THRESHOLD)
 def _uniq_store(page_id: str, text: str):
     corpus = _uniq_load_corpus()
     bucket = corpus.get(page_id) or []
@@ -967,7 +971,7 @@ YÊU CẦU:
 - Không thêm ghi chú ngoài nội dung post.
 """.strip()
 
-    MAX_TRIES = 5
+    MAX_TRIES = MAX_TRIES_ENV
     corpus = _uniq_load_corpus()
     history = corpus.get(page_id) or []
     last_err = None
@@ -988,7 +992,7 @@ YÊU CẦU:
             lines = [re.sub(r"\s+$","",ln) for ln in text.splitlines()]
             text = "\n".join(lines).strip()
 
-            if _uniq_too_similar(_uniq_norm(text), history):
+            if ANTI_DUP_ENABLED and _uniq_too_similar(_uniq_norm(text), history):
                 last_err = {"reason":"similar"}
                 continue
 
@@ -1161,6 +1165,36 @@ def api_settings_import_v2():
             count += 1
     _save_settings(data)
     return jsonify({"ok": True, "updated": count})
+
+
+# ------------------------ Admin helpers (reset/inspect corpus) ------------------------
+@app.route("/admin/corpus-info")
+def admin_corpus_info():
+    key = request.args.get("key", "")
+    if key != SECRET_KEY:
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        data = _uniq_load_corpus()
+        info = {pid: len(items or []) for pid, items in data.items()}
+        return jsonify({"ok": True, "pages": info, "path": CORPUS_FILE})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/admin/reset-corpus", methods=["POST", "GET"])
+def admin_reset_corpus():
+    key = request.args.get("key", "")
+    if key != SECRET_KEY:
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        size = 0
+        if os.path.exists(CORPUS_FILE):
+            size = os.path.getsize(CORPUS_FILE)
+            os.remove(CORPUS_FILE)
+        # recreate empty corpus
+        _uniq_save_corpus({})
+        return jsonify({"ok": True, "deleted_bytes": size, "path": CORPUS_FILE})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
