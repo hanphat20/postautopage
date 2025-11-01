@@ -26,17 +26,21 @@ DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
 
 OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL    = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+# Anti-dup
 ANTI_DUP_ENABLED = os.getenv("ANTI_DUP_ENABLED", "1") not in ("0","false","False")
 DUP_J_THRESHOLD  = float(os.getenv("DUP_J", "0.35"))
 DUP_L_THRESHOLD  = float(os.getenv("DUP_L", "0.90"))
 MAX_TRIES_ENV    = int(os.getenv("MAX_TRIES", "5"))
-CORPUS_FILE = os.getenv("CORPUS_FILE", "/mnt/data/post_corpus.json")
+
+# ✅ Mặc định dùng /tmp để chạy tốt trên Render (ghi được không cần disk)
+CORPUS_FILE     = os.getenv("CORPUS_FILE", "/tmp/post_corpus.json")
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
-# ✅ CHANGE: use project file by default (persistent across redeploys)
-SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/var/data/page_settings.json')
+# ✅ Dùng file settings ở /tmp mặc định (có thể override bằng env)
+SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/tmp/page_settings.json')
 
 def _load_settings():
     """
@@ -63,26 +67,6 @@ def _load_settings():
                 }
         _save_settings(data)
         return data
-
-    return {}
-    # Auto-init from CSV (optional)
-    try:
-        if os.path.exists('settings.csv'):
-            data = {}
-            with open('settings.csv', newline='', encoding='utf-8') as f:
-                rdr = csv.DictReader(f)
-                for row in rdr:
-                    pid = (row.get('id') or '').strip()
-                    if not pid:
-                        continue
-                    data[pid] = {
-                        'keyword': (row.get('keyword') or row.get('tukhoa') or '').strip(),
-                        'source':  (row.get('source')  or row.get('link')   or '').strip(),
-                    }
-            _save_settings(data)
-            return data
-    except Exception:
-        pass
 
     return {}
 
@@ -347,7 +331,6 @@ INDEX_HTML = r"""<!doctype html>
       box1.innerHTML = html; box2.innerHTML = html2;
       st1 && (st1.textContent = 'Tải ' + pages.length + ' page.'); 
       st2 && (st2.textContent = 'Tải ' + pages.length + ' page.');
-      // reset master checkboxes
       const sa1 = $('#inbox_select_all'); const sa2 = $('#post_select_all');
       if(sa1){ sa1.checked = false; sa1.onchange = () => {
         const checked = sa1.checked; $all('.pg-inbox').forEach(cb => cb.checked = checked);
@@ -355,7 +338,6 @@ INDEX_HTML = r"""<!doctype html>
       if(sa2){ sa2.checked = false; sa2.onchange = () => {
         const checked = sa2.checked; $all('.pg-post').forEach(cb => cb.checked = checked);
       }; }
-      // keep master in sync when user toggles individually
       function syncMaster(groupSel, masterSel){
         const allCbs = $all(groupSel);
         if(!allCbs.length) return;
@@ -398,7 +380,6 @@ INDEX_HTML = r"""<!doctype html>
       const unread = (x.unread_count && x.unread_count>0);
       const badge = unread ? '<span class="badge unread">Chưa đọc '+(x.unread_count||'')+'</span>' : '<span class="badge">Đã đọc</span>';
       let senders = safeSenders(x);
-      // chuẩn hoá link facebook
       let openLink = x.link || '';
       if (openLink && openLink.startsWith('/')) { openLink = 'https://facebook.com' + openLink; }
       return '<div class="conv-item" data-idx="'+i+'">        <div>          <div><b>'+senders+'</b> · <span class="conv-meta">'+(x.page_name||'')+'</span></div>          <div class="conv-meta">'+(x.snippet||'')+'</div>        </div>        <div class="right" style="min-width:180px">'+when+'<br>'+badge+(openLink?('<div style="margin-top:4px"><a target="_blank" href="'+openLink+'">Mở trên Facebook</a></div>'):'')+'</div>      </div>';
@@ -431,7 +412,6 @@ INDEX_HTML = r"""<!doctype html>
   async function loadThreadByIndex(i){
     const conv = (window.__convData||[])[i]; if(!conv) return;
     window.__currentConv = conv;
-    // cache user_id from participants if server provided it
     if(!conv.user_id && conv.participants && conv.participants.data){
       const candidate = conv.participants.data.find(p => p.id !== conv.page_id);
       if(candidate) conv.user_id = candidate.id;
@@ -459,7 +439,6 @@ INDEX_HTML = r"""<!doctype html>
     loadThreadByIndex(+it.getAttribute('data-idx'));
   });
 
-  // Gửi reply: Enter để gửi hoặc bấm nút
   $('#reply_text')?.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); $('#btn_reply')?.click(); } });
   $('#btn_reply')?.addEventListener('click', async ()=>{
     const input = $('#reply_text'); const txt = (input.value||'').trim();
@@ -483,13 +462,11 @@ INDEX_HTML = r"""<!doctype html>
       }
       input.value='';
       st.textContent='Đã gửi.';
-      // refresh thread ngay
       loadThreadByIndex((window.__convData||[]).findIndex(x=>x.id===conv.id));
     }catch(e){ st.textContent='Lỗi gửi'; }
   });
 
   // Đăng bài
-  // AI generate
   $('#btn_ai_generate')?.addEventListener('click', async ()=>{
     const prompt = ($('#ai_prompt')?.value||'').trim();
     const st = $('#post_status'); const pids = $all('.pg-post:checked').map(i=>i.value);
@@ -514,7 +491,6 @@ INDEX_HTML = r"""<!doctype html>
     return d;
   }
 
-  // Submit đăng bài
   $('#btn_post_submit')?.addEventListener('click', async ()=>{
     const pids = $all('.pg-post:checked').map(i=>i.value);
     const textVal = ($('#post_text')?.value||'').trim();
@@ -536,7 +512,6 @@ INDEX_HTML = r"""<!doctype html>
     }catch(e){ st.textContent = 'Lỗi đăng bài'; }
   });
 
-  // SSE optional
   try{
     const es = new EventSource('/stream/messages');
     es.onmessage = (ev)=>{ };
@@ -576,10 +551,7 @@ INDEX_HTML = r"""<!doctype html>
     }catch(e){ st.textContent = 'Lỗi lưu'; }
   });
 
-  // Export CSV
   $('#btn_settings_export')?.addEventListener('click', ()=>{ window.location.href = '/api/settings/export'; });
-
-  // Import CSV
   $('#settings_import')?.addEventListener('change', async (ev)=>{
     const f = ev.target.files?.[0]; if(!f) return; const st = $('#settings_status');
     const fd = new FormData(); fd.append('file', f);
@@ -591,7 +563,6 @@ INDEX_HTML = r"""<!doctype html>
     }catch(e){ st.textContent='Lỗi nhập CSV'; }
   });
 
-  // Polling đơn giản mỗi 30s để cập nhật số lượng chưa đọc
   setInterval(()=>{
     const anyChecked = $all('.pg-inbox:checked').length>0;
     if(anyChecked){ refreshConversations(); }
@@ -635,7 +606,6 @@ def api_inbox_conversations():
         only_unread = request.args.get("only_unread") in ("1", "true", "True")
         limit = int(request.args.get("limit", "25"))
 
-        # cache key
         key = f"{','.join(sorted(page_ids))}|{int(only_unread)}|{limit}"
         hit = _CONV_CACHE.get(key)
         if hit and hit.get('expire',0) > time.time():
@@ -645,7 +615,6 @@ def api_inbox_conversations():
         fields = "updated_time,snippet,senders,unread_count,can_reply,participants,link"
         for pid in page_ids:
             token = get_page_token(pid)
-            # Lấy tên page thật để hiển thị
             page_name = f"Page {pid}"
             try:
                 info = fb_get(pid, {"access_token": token, "fields": "name"})
@@ -661,7 +630,6 @@ def api_inbox_conversations():
             for c in data.get("data", []):
                 c["page_id"] = pid
                 c["page_name"] = page_name
-                # pick user_id (PSID) from participants if available
                 try:
                     parts = c.get("participants", {}).get("data", [])
                     uid = None
@@ -692,7 +660,6 @@ def api_inbox_messages():
         page_id = request.args.get("page_id")
         if not conv_id:
             return jsonify({"data": []})
-        # prefer the token of the page that owns this conversation
         if page_id:
             token = get_page_token(page_id)
         elif PAGE_TOKENS:
@@ -725,7 +692,7 @@ def api_inbox_messages():
 def api_inbox_reply():
     """
     Try two strategies:
-    1) POST /{conversation_id}/messages  (works for Page Inbox in many cases)
+    1) POST /{conversation_id}/messages
     2) If provided user_id + page_id, use Send API POST /me/messages
     """
     try:
@@ -733,16 +700,14 @@ def api_inbox_reply():
         conv_id = js.get("conversation_id")
         page_id = js.get("page_id")
         text = (js.get("text") or "").strip()
-        user_id = js.get("user_id")  # PSID (optional)
+        user_id = js.get("user_id")
 
         if not conv_id and not (page_id and user_id):
             return jsonify({"error": "Thiếu conversation_id hoặc (page_id + user_id)"})
         if not text:
             return jsonify({"error": "Thiếu nội dung tin nhắn"})
 
-        # prefer strategy 1 (simpler)
         if conv_id:
-            # choose any page token (or token by page_id if provided)
             token = get_page_token(page_id) if page_id else list(PAGE_TOKENS.values())[0]
             try:
                 out = fb_post(f"{conv_id}/messages", {
@@ -751,7 +716,6 @@ def api_inbox_reply():
                 })
                 return jsonify({"ok": True, "result": out})
             except Exception as e:
-                # fallback to Send API if user_id available
                 if page_id and user_id:
                     token = get_page_token(page_id)
                     url = f"{FB_API}/me/messages"
@@ -763,7 +727,6 @@ def api_inbox_reply():
                     return jsonify({"ok": True, "result": data})
                 raise
 
-        # direct Send API path
         token = get_page_token(page_id)
         url = f"{FB_API}/me/messages"
         r = requests.post(url, params={"access_token": token},
@@ -805,8 +768,7 @@ def api_settings_save():
     return jsonify({"ok": True})
 
 
-# ------------------------ AI Generate (REPLACED) ------------------------
-# Short, varied, call-to-action oriented, "bạn" voice, with anti-dup checks
+# ------------------------ AI Generate ------------------------
 
 def _uniq_load_corpus() -> dict:
     try:
@@ -839,7 +801,6 @@ def _uniq_jaccard(a: str, b: str, n=3) -> float:
     return inter/union if union else 0.0
 
 def _uniq_lev_ratio(a: str, b: str) -> float:
-    # Levenshtein ratio gọn (approx) bằng edit distance động (O(n*m)).
     A, B = a, b
     if not A or not B: return 0.0
     la, lb = len(A), len(B)
@@ -856,10 +817,6 @@ def _uniq_lev_ratio(a: str, b: str) -> float:
     return 1.0 - (dist / maxlen)
 
 def _uniq_too_similar(candidate: str, history: list) -> bool:
-    """
-    Return True nếu candidate quá giống với BÀI GẦN NHẤT trong history.
-    History được lưu với bài mới nhất ở đầu (index 0).
-    """
     if not history:
         return False
     last = history[0].get("text", "") or ""
@@ -868,6 +825,7 @@ def _uniq_too_similar(candidate: str, history: list) -> bool:
     j = _uniq_jaccard(candidate, last, n=3)
     l = _uniq_lev_ratio(candidate, last)
     return (j >= DUP_J_THRESHOLD or l >= DUP_L_THRESHOLD)
+
 def _uniq_store(page_id: str, text: str):
     corpus = _uniq_load_corpus()
     bucket = corpus.get(page_id) or []
@@ -905,11 +863,11 @@ _client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
     """
-    Sinh bài NGẮN, xưng 'bạn', kêu gọi LIÊN HỆ, luôn khác nhau:
-    - Tập trung vấn đề người dùng: mất điểm, khoá TK, rút tiền, chặn link, tranh chấp...
-    - Chèn Tool dưới link chính.
-    - Hashtag cố định theo keyword + extra random.
-    - Chống trùng: Jaccard + Levenshtein, auto-regenerate.
+    Sinh bài NGẮN, xưng 'bạn', kêu gọi LIÊN HỆ, với 3 dòng đầu chuẩn hoá:
+    1) Khẳng định link chính thức/không bị chặn/chuẩn 2025/an toàn/chính xác
+    2) "#<keyword> ==> <source>"
+    3) "Tặng phương pháp & Tool hỗ trợ người chơi: <giveaway_link>"
+    Chống trùng bằng Jaccard + Levenshtein; auto-regenerate.
     """
     js = request.get_json(force=True) or {}
     page_id = js.get("page_id") or ""
@@ -931,10 +889,23 @@ def api_ai_generate():
     giveaway_link = "https://sites.google.com/view/toolbacarat-nohu/"
     hashtags_hint = _hashtags_for(keyword)
 
-    # Muối ngẫu nhiên để đa dạng hoá
     salt_style = random.choice(["năng động", "ấm áp", "quyết đoán", "tinh gọn", "thân thiện"])
     salt_cta   = random.choice(["Liên hệ ngay", "Nhắn ngay", "Gọi ngay", "Kết nối ngay", "Trao đổi ngay"])
     salt_id    = uuid.uuid4().hex[:8]
+
+    # ✅ Dòng 1 chọn ngẫu nhiên để đa dạng
+    headline_variants = [
+        "Link chính thức – không bị chặn, chuẩn 2025, an toàn & chính xác.",
+        "Link chính thức 2025 – không bị chặn, truy cập an toàn.",
+        "Link chuẩn 2025 – chính xác, an toàn, truy cập ổn định.",
+        "Link chính thức – an toàn, chính xác, hoạt động ổn định 2025.",
+        "Link chuẩn – không bị chặn, đúng bản 2025."
+    ]
+    headline_line = random.choice(headline_variants)
+
+    # ✅ Dòng 2 theo keyword từng page
+    keyword_tag = (keyword or "toolgame").strip().replace(" ", "").lower()
+    keyword_tag_line = f"#{keyword_tag} ==> {source or '(chưa cấu hình)'}"
 
     system_msg = (
         "Bạn là copywriter tiếng Việt. Viết ngắn gọn, tự nhiên, xưng 'bạn', "
@@ -952,9 +923,9 @@ DỮ LIỆU
 - prompt thêm: {user_prompt or "(trống)"}
 
 CẤU TRÚC BẮT BUỘC (ngắn gọn):
-1) Tiêu đề 1 dòng (1 emoji vừa phải), nêu rõ hỗ trợ & tốc độ
-2) Dòng link chính (in ra nếu có): {source or "(trống)"}
-3) "Tặng phương pháp & Tool hỗ trợ người chơi:" + {giveaway_link}
+1) Dòng 1: Một câu khẳng định link chính thức/không bị chặn/chuẩn 2025/an toàn/chính xác (không emoji).
+2) Dòng 2: "{keyword_tag_line}"
+3) Dòng 3: "Tặng phương pháp & Tool hỗ trợ người chơi: {giveaway_link}"
 4) 1–2 câu mở ngắn (nêu đúng vấn đề bạn GẶP và cam kết xử lý)
 5) "Thông tin quan trọng:" 3 gạch đầu dòng ngắn (hỗ trợ 24/7; bảo mật; link chính chủ)
 6) 1 dòng tổng hợp vấn đề: "Bạn gặp: mất điểm • khoá tài khoản • rút tiền • bị chặn link • tranh chấp?"
@@ -968,7 +939,7 @@ CẤU TRÚC BẮT BUỘC (ngắn gọn):
 YÊU CẦU:
 - RÕ, NGẮN, DỄ HÀNH ĐỘNG. Không dài dòng; không kể lể quy trình.
 - Xưng 'bạn' xuyên suốt; không dùng 'khách'.
-- Không thêm ghi chú ngoài nội dung post.
+- TUÂN THỦ CHÍNH XÁC 3 DÒNG ĐẦU.
 """.strip()
 
     MAX_TRIES = MAX_TRIES_ENV
@@ -990,8 +961,16 @@ YÊU CẦU:
             )
             text = (resp.choices[0].message.content or "").strip()
             lines = [re.sub(r"\s+$","",ln) for ln in text.splitlines()]
+
+            # ✅ ÉP 3 DÒNG ĐẦU cho chắc chắn đúng format yêu cầu
+            if len(lines) < 3:
+                lines += [""] * (3 - len(lines))
+            lines[0] = headline_line
+            lines[1] = keyword_tag_line
+            lines[2] = f"Tặng phương pháp & Tool hỗ trợ người chơi: {giveaway_link}"
             text = "\n".join(lines).strip()
 
+            # Anti-dup
             if ANTI_DUP_ENABLED and _uniq_too_similar(_uniq_norm(text), history):
                 last_err = {"reason":"similar"}
                 continue
@@ -1008,14 +987,21 @@ YÊU CẦU:
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
-    """Simple local upload to /mnt/data and return path for later"""
+    """Simple local upload to /mnt/data or /tmp and return path for later"""
     f = request.files.get("file")
     if not f:
         return jsonify({"error":"Không có file"})
     base = "/mnt/data"
-    os.makedirs(base, exist_ok=True)
-    save_path = os.path.join(base, f.filename)
-    f.save(save_path)
+    try:
+        os.makedirs(base, exist_ok=True)
+        save_path = os.path.join(base, f.filename)
+        f.save(save_path)
+    except Exception:
+        # fallback /tmp if /mnt/data không khả dụng
+        base = "/tmp"
+        os.makedirs(base, exist_ok=True)
+        save_path = os.path.join(base, f.filename)
+        f.save(save_path)
     return jsonify({"ok": True, "path": save_path})
 
 
@@ -1040,7 +1026,6 @@ def api_pages_post():
         for pid in pages:
             token = get_page_token(pid)
 
-            # Decide media type
             is_video = False
             if media_path:
                 lower = media_path.lower()
@@ -1071,10 +1056,8 @@ def api_pages_post():
                     else:
                         out = fb_post(f"{pid}/photos", {"url": media_url, "caption": text_content, "access_token": token})
                 else:
-                    # text only
                     out = fb_post(f"{pid}/feed", {"message": text_content, "access_token": token})
 
-                # NOTE: Facebook Reels for Pages API có thể khác; nếu chọn reels nhưng không có video, báo note
                 note = None
                 if post_type == 'reels' and not is_video:
                     note = 'Reels yêu cầu video; đã đăng như Feed do không có video.'
@@ -1086,7 +1069,7 @@ def api_pages_post():
         return jsonify({"error": str(e)})
 
 
-# ------------------------ Minimal webhook endpoints (optional) ------------------------
+# ------------------------ Minimal webhook endpoints ------------------------
 @app.route("/webhook/events", methods=["GET","POST"])
 def webhook_events():
     if request.method == "GET":
@@ -1096,7 +1079,6 @@ def webhook_events():
         if mode == "subscribe" and token == VERIFY_TOKEN:
             return Response(challenge, status=200)
         return Response("forbidden", status=403)
-    # POST: just acknowledge
     return jsonify({"ok": True})
 
 
@@ -1153,7 +1135,6 @@ def api_settings_import_v2():
         if not pid:
             continue
         if pid not in PAGE_TOKENS:
-            # skip unknown page ids
             continue
         keyword = (row.get("keyword") or row.get("tukhoa") or "").strip()
         source  = (row.get("source")  or row.get("link")   or "").strip()
@@ -1190,7 +1171,6 @@ def admin_reset_corpus():
         if os.path.exists(CORPUS_FILE):
             size = os.path.getsize(CORPUS_FILE)
             os.remove(CORPUS_FILE)
-        # recreate empty corpus
         _uniq_save_corpus({})
         return jsonify({"ok": True, "deleted_bytes": size, "path": CORPUS_FILE})
     except Exception as e:
