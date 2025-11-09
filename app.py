@@ -900,7 +900,6 @@ DỮ LIỆU
 CẤU TRÚC BẮT BUỘC:
 1) Dòng 1: Câu khẳng định link chính thức/không bị chặn/chuẩn 2025/an toàn/chính xác (CHO PHÉP emoji đầu dòng).
 2) Dòng 2: Dạng: "#{keyword_tag} ==> {source or '(chưa cấu hình)'}" (CHO PHÉP 1 emoji đầu dòng).
-3) Dòng 3: Dạng: "Tặng phương pháp & Tool hỗ trợ người chơi: {giveaway_link}" (CHO PHÉP 1 emoji đầu dòng).
 
 4) THÂN BÀI: {BODY_MIN_WORDS}–{BODY_MAX_WORDS} từ (4–10 dòng), diễn đạt linh hoạt; có thể dùng 1–3 emoji NHẸ; nêu rõ cách làm việc nhanh gọn, cập nhật tiến độ, bảo mật.
 
@@ -957,8 +956,7 @@ QUY TẮC ĐA DẠNG:
             ]
             headline_line = f"{icon_head} " + random.choice(headline_variants)
             keyword_tag_line = f"{icon_hash} #{keyword_tag} ==> {source or '(chưa cấu hình)'}"
-            gift_line = f"{icon_gift} Tặng phương pháp & Tool hỗ trợ người chơi: {giveaway_link}"
-
+        
             if len(lines) < 3:
                 lines += [""] * (3 - len(lines))
             lines[0] = headline_line
