@@ -201,21 +201,21 @@ def _decorate_emojis(text: str) -> str:
                     in_bullets = False
     return "\n".join(lines)
 
-# ------------------------ AI Content Writer (Phiên bản thông minh) ------------------------
+# ------------------------ AI Content Writer (Phiên bản đã sửa độ dài) ------------------------
 
 class AIContentWriter:
     def __init__(self, openai_client):
         self.client = openai_client
         self.content_framework = {
             'problems': {
-                'financial': ['mất điểm', 'khóa tài khoản', 'rút tiền thất bại', 'giao dịch treo', 'thất lạc giao dịch'],
-                'technical': ['bị chặn link', 'không thể truy cập', 'kết nối gián đoạn', 'lỗi kết nối', 'mất kết nối'],
-                'security': ['bảo mật', 'xác thực', 'bảo vệ tài khoản', 'đăng nhập thất bại']
+                'financial': ['mất điểm', 'khóa tài khoản', 'rút tiền thất bại', 'giao dịch treo', 'thất lạc giao dịch', 'không thể rút tiền', 'số dư biến mất'],
+                'technical': ['bị chặn link', 'không thể truy cập', 'kết nối gián đoạn', 'lỗi kết nối', 'mất kết nối', 'truy cập bị từ chối'],
+                'security': ['bảo mật', 'xác thực', 'bảo vệ tài khoản', 'đăng nhập thất bại', 'tài khoản bị đánh cắp']
             },
             'solutions': {
-                'speed': ['nhanh chóng', 'tức thì', 'trong tích tắc', 'ngay lập tức', 'khẩn trương'],
-                'quality': ['chuyên nghiệp', 'chính xác', 'tận tâm', 'chu đáo', 'tận tình'],
-                'security': ['bảo mật', 'an toàn', 'riêng tư', 'bí mật', 'bảo vệ']
+                'speed': ['nhanh chóng', 'tức thì', 'trong tích tắc', 'ngay lập tức', 'khẩn trương', 'nhanh gọn'],
+                'quality': ['chuyên nghiệp', 'chính xác', 'tận tâm', 'chu đáo', 'tận tình', 'cẩn thận'],
+                'security': ['bảo mật', 'an toàn', 'riêng tư', 'bí mật', 'bảo vệ', 'mã hóa']
             },
             'tones': {
                 'urgent': "🔴 Sự cố cần giải quyết NGAY?",
@@ -236,7 +236,9 @@ class AIContentWriter:
             {"icon": "🌐", "keywords": ["ổn định", "liên tục", "thông suốt"]},
             {"icon": "⚡", "keywords": ["xử lý", "phản hồi", "khẩn cấp"]},
             {"icon": "👨‍💼", "keywords": ["chuyên gia", "chuyên nghiệp", "kinh nghiệm"]},
-            {"icon": "🔐", "keywords": ["mã hóa", "bảo vệ", "an ninh"]}
+            {"icon": "🔐", "keywords": ["mã hóa", "bảo vệ", "an ninh"]},
+            {"icon": "📊", "keywords": ["minh bạch", "rõ ràng", "chi tiết"]},
+            {"icon": "🎯", "keywords": ["chính xác", "hiệu quả", "tối ưu"]}
         ]
 
     def generate_smart_title(self):
@@ -246,13 +248,15 @@ class AIContentWriter:
             "❖ {platform} {year} - {promise1} và {promise2}",
             "❖ Gateway {year}: {focus} với {advantage}",
             "❖ {platform} Premium {year}: {value1} + {value2}",
-            "❖ Nâng cấp {year} - {improvement1} và {improvement2}"
+            "❖ Nâng cấp {year} - {improvement1} và {improvement2}",
+            "❖ {platform} {year}: {slogan1} cùng {slogan2}",
+            "❖ Kết nối {year}: {attribute1} & {attribute2}"
         ]
         
-        features = ["Bảo mật tối đa", "Tốc độ cao", "Ổn định tuyệt đối", "Kết nối thông minh", "Hỗ trợ chuyên sâu"]
-        qualities = ["mượt mà", "liền mạch", "an toàn", "nhanh chóng", "ổn định"]
-        adjectives = ["vượt trội", "khác biệt", "ưu việt", "hoàn hảo", "cao cấp"]
-        benefits = ["bảo mật đỉnh cao", "tốc độ vượt trội", "trải nghiệm mượt mà", "hỗ trợ tức thì"]
+        features = ["Bảo mật tối đa", "Tốc độ cao", "Ổn định tuyệt đối", "Kết nối thông minh", "Hỗ trợ chuyên sâu", "Hiệu suất vượt trội"]
+        qualities = ["mượt mà", "liền mạch", "an toàn", "nhanh chóng", "ổn định", "bảo mật"]
+        adjectives = ["vượt trội", "khác biệt", "ưu việt", "hoàn hảo", "cao cấp", "chuyên nghiệp"]
+        benefits = ["bảo mật đỉnh cao", "tốc độ vượt trội", "trải nghiệm mượt mà", "hỗ trợ tức thì", "kết nối ổn định"]
         
         template = random.choice(base_templates)
         return template.format(
@@ -263,14 +267,18 @@ class AIContentWriter:
             adjective=random.choice(adjectives),
             benefit=random.choice(benefits),
             platform="JB88",
-            promise1=random.choice(["Kết nối bảo mật", "Đường link chính chủ", "Truy cập an toàn"]),
-            promise2=random.choice(["hỗ trợ 24/7", "xử lý tức thì", "giải pháp toàn diện"]),
-            focus=random.choice(["Bảo mật", "Tốc độ", "Ổn định", "Hiệu suất"]),
-            advantage=random.choice(["công nghệ mới", "đội ngũ chuyên gia", "hệ thống tối ưu", "giải pháp thông minh"]),
-            value1=random.choice(["Bảo mật cấp cao", "Tốc độ vượt trội"]),
-            value2=random.choice(["Hỗ trợ chuyên sâu", "Trải nghiệm cá nhân hóa"]),
-            improvement1=random.choice(["tốc độ xử lý", "bảo mật dữ liệu", "trải nghiệm người dùng"]),
-            improvement2=random.choice(["độ ổn định", "khả năng tiếp cận", "hỗ trợ khách hàng"])
+            promise1=random.choice(["Kết nối bảo mật", "Đường link chính chủ", "Truy cập an toàn", "Hệ thống ổn định"]),
+            promise2=random.choice(["hỗ trợ 24/7", "xử lý tức thì", "giải pháp toàn diện", "dịch vụ chuyên nghiệp"]),
+            focus=random.choice(["Bảo mật", "Tốc độ", "Ổn định", "Hiệu suất", "Chất lượng"]),
+            advantage=random.choice(["công nghệ mới", "đội ngũ chuyên gia", "hệ thống tối ưu", "giải pháp thông minh", "dịch vụ cao cấp"]),
+            value1=random.choice(["Bảo mật cấp cao", "Tốc độ vượt trội", "Kết nối ổn định"]),
+            value2=random.choice(["Hỗ trợ chuyên sâu", "Trải nghiệm cá nhân hóa", "Dịch vụ tận tâm"]),
+            improvement1=random.choice(["tốc độ xử lý", "bảo mật dữ liệu", "trải nghiệm người dùng", "độ ổn định hệ thống"]),
+            improvement2=random.choice(["độ ổn định", "khả năng tiếp cận", "hỗ trợ khách hàng", "chất lượng dịch vụ"]),
+            slogan1=random.choice(["An toàn tuyệt đối", "Bảo mật tối ưu", "Kết nối liền mạch"]),
+            slogan2=random.choice(["hỗ trợ chuyên nghiệp", "giải pháp toàn diện", "dịch vụ đẳng cấp"]),
+            attribute1=random.choice(["Bảo mật", "Tốc độ", "Ổn định"]),
+            attribute2=random.choice(["An toàn", "Hiệu quả", "Chuyên nghiệp"])
         )
 
     def generate_contextual_description(self):
@@ -283,23 +291,27 @@ class AIContentWriter:
         tone = random.choice(list(self.content_framework['tones'].values()))
         
         description_templates = [
-            f"{tone} Đang gặp vấn đề về **{', '.join(random.sample(problems, 2))}**? Đội ngũ của chúng tôi cam kết giải quyết {random.choice(solutions)} với quy trình chuyên nghiệp và bảo mật.",
+            f"{tone} Đang gặp vấn đề về **{', '.join(random.sample(problems, 2))}**? Đội ngũ của chúng tôi cam kết giải quyết {random.choice(solutions)} với quy trình chuyên nghiệp và bảo mật. Chúng tôi hiểu rằng mỗi phút giây đều quý giá và sẽ nỗ lực hết mình để khôi phục trải nghiệm của bạn trong thời gian ngắn nhất.",
             
-            f"Không thể **{random.choice(problems)}**? Đừng để điều này làm gián đoạn trải nghiệm của bạn! Hệ thống hỗ trợ {random.choice(solutions)} của chúng tôi luôn sẵn sàng.",
+            f"Không thể **{random.choice(problems)}**? Đừng để điều này làm gián đoạn trải nghiệm của bạn! Hệ thống hỗ trợ {random.choice(solutions)} của chúng tôi luôn sẵn sàng. Với đội ngũ chuyên gia giàu kinh nghiệm, chúng tôi sẽ đồng hành cùng bạn từ bước đầu tiên cho đến khi vấn đề được giải quyết hoàn toàn.",
             
-            f"Từ **{problems[0]}** đến **{problems[-1]}** - mọi thách thức đều có giải pháp. Phương châm của chúng tôi: xử lý {random.choice(solutions)} - bảo mật tuyệt đối.",
+            f"Từ **{problems[0]}** đến **{problems[-1]}** - mọi thách thức đều có giải pháp. Phương châm của chúng tôi: xử lý {random.choice(solutions)} - bảo mật tuyệt đối. Chúng tôi không chỉ khắc phục sự cố mà còn đảm bảo trải nghiệm của bạn được cải thiện tốt hơn sau mỗi lần hỗ trợ.",
             
-            f"Trải nghiệm dịch vụ {random.choice(solutions)} đẳng cấp. Dù bạn đang đối mặt với **{random.choice(problems)}** hay bất kỳ vấn đề nào khác, chúng tôi đều có giải pháp phù hợp.",
+            f"Trải nghiệm dịch vụ {random.choice(solutions)} đẳng cấp. Dù bạn đang đối mặt với **{random.choice(problems)}** hay bất kỳ vấn đề nào khác, chúng tôi đều có giải pháp phù hợp. Mỗi trường hợp đều được phân tích kỹ lưỡng và xử lý với sự tận tâm cao nhất.",
             
-            f"**{random.choice(problems).title()}** làm phiền bạn? Đội ngũ chuyên gia của chúng tôi đã sẵn sàng hỗ trợ {random.choice(solutions)} và hiệu quả.",
+            f"**{random.choice(problems).title()}** làm phiền bạn? Đội ngũ chuyên gia của chúng tôi đã sẵn sàng hỗ trợ {random.choice(solutions)} và hiệu quả. Chúng tôi cam kết minh bạch trong quy trình làm việc và cập nhật liên tục tiến độ xử lý cho khách hàng.",
             
-            f"Đừng để **{random.choice(problems)}** cản trở niềm vui của bạn! Giải pháp {random.choice(solutions)} chỉ cách bạn một cuộc gọi."
+            f"Đừng để **{random.choice(problems)}** cản trở niềm vui của bạn! Giải pháp {random.choice(solutions)} chỉ cách bạn một cuộc gọi. Với hệ thống làm việc chuyên nghiệp và quy trình rõ ràng, chúng tôi tự tin mang lại sự hài lòng tối đa cho mọi khách hàng.",
+            
+            f"Gặp khó khăn với **{random.choice(problems)}**? Hãy để chúng tôi trở thành đối tác đáng tin cậy của bạn. Phương pháp tiếp cận {random.choice(solutions)} cùng công nghệ hiện đại sẽ giúp giải quyết mọi vấn đề một cách triệt để và nhanh chóng.",
+            
+            f"Mọi vấn đề từ **{problems[0]}** cho đến **{problems[-1]}** đều có hướng giải quyết với chúng tôi. Đội ngũ hỗ trợ {random.choice(solutions)} luôn sẵn sàng lắng nghe và đưa ra giải pháp tối ưu nhất cho tình huống cụ thể của bạn."
         ]
         
         return random.choice(description_templates)
 
     def generate_dynamic_benefits(self):
-        num_benefits = random.randint(4, 6)
+        num_benefits = random.randint(6, 8)  # Tăng số lượng benefits để tăng độ dài
         selected_benefits = random.sample(self.benefit_variations, num_benefits)
         
         benefit_texts = []
@@ -312,7 +324,9 @@ class AIContentWriter:
                     f"{modifier} trong {base_text}",
                     f"đảm bảo {base_text} {modifier}",
                     f"{modifier} - {base_text} tuyệt đối",
-                    f"giải pháp {base_text} {modifier}"
+                    f"giải phóz {base_text} {modifier}",
+                    f"cam kết {base_text} {modifier}",
+                    f"{base_text} {modifier} hàng đầu"
                 ]
                 text = random.choice(templates)
             else:
@@ -328,19 +342,19 @@ class AIContentWriter:
         
         if is_urgent:
             ctas = [
-                "⏰ **Thời gian là vàng!** Liên hệ ngay để được ưu tiên xử lý.",
-                "🚨 **Tình huống khẩn cấp?** Phản hồi ngay lập tức khi bạn liên hệ.",
-                "⚡ **Cần giải quyết gấp?** Chúng tôi ưu tiên các trường hợp như bạn.",
-                "🔴 **Không thể chờ đợi?** Hỗ trợ tức thì - gọi ngay!",
-                "💥 **Vấn đề cấp bách?** Đội đặc nhiệm sẵn sàng hỗ trợ ngay!"
+                "⏰ **Thời gian là vàng!** Liên hệ ngay để được ưu tiên xử lý và khôi phục trạng thái nhanh chóng.",
+                "🚨 **Tình huống khẩn cấp?** Phản hồi ngay lập tức khi bạn liên hệ - đội ngũ chuyên gia sẵn sàng hỗ trợ.",
+                "⚡ **Cần giải quyết gấp?** Chúng tôi ưu tiên các trường hợp như bạn và cam kết xử lý trong thời gian ngắn nhất.",
+                "🔴 **Không thể chờ đợi?** Hỗ trợ tức thì - gọi ngay để được tư vấn và hướng dẫn chi tiết!",
+                "💥 **Vấn đề cấp bách?** Đội đặc nhiệm sẵn sàng hỗ trợ ngay! Liên hệ ngay để không bỏ lỡ cơ hội."
             ]
         else:
             ctas = [
-                "💬 **Sẵn sàng hỗ trợ!** Để lại thông tin để được tư vấn chi tiết.",
-                "🤝 **Kết nối ngay hôm nay** để trải nghiệm dịch vụ đẳng cấp.",
-                "📞 **Đừng ngần ngại** - Đội ngũ chuyên gia luôn sẵn sàng lắng nghe.",
-                "🌟 **Bắt đầu ngay** - Giải pháp hoàn hảo đang chờ bạn.",
-                "🎯 **Hành động ngay** để có trải nghiệm tốt nhất."
+                "💬 **Sẵn sàng hỗ trợ!** Để lại thông tin để được tư vấn chi tiết và giải pháp phù hợp nhất.",
+                "🤝 **Kết nối ngay hôm nay** để trải nghiệm dịch vụ đẳng cấp và chuyên nghiệp từ đội ngũ giàu kinh nghiệm.",
+                "📞 **Đừng ngần ngại** - Đội ngũ chuyên gia luôn sẵn sàng lắng nghe và đưa ra giải pháp tối ưu cho bạn.",
+                "🌟 **Bắt đầu ngay** - Giải pháp hoàn hảo đang chờ bạn khám phá với sự hỗ trợ tận tâm từ chúng tôi.",
+                "🎯 **Hành động ngay** để có trải nghiệm tốt nhất và giải quyết mọi vấn đề một cách triệt để."
             ]
         
         return random.choice(ctas)
@@ -351,35 +365,46 @@ class AIContentWriter:
         content_lower = content.lower()
         
         if any(word in content_lower for word in ['bảo mật', 'an toàn', 'riêng tư']):
-            base_tags.extend(["#BảoMậtTốiĐa", "#AnToànTuyệtĐối", "#BảoVệThôngMinh"])
+            base_tags.extend(["#BảoMậtTốiĐa", "#AnToànTuyệtĐối", "#BảoVệThôngMinh", "#MãHóaAnToàn"])
         elif any(word in content_lower for word in ['nhanh', 'tốc độ', 'khẩn']):
-            base_tags.extend(["#XửLýNhanh", "#TốcĐộCao", "#HiệuSuấtVượtTrội"])
+            base_tags.extend(["#XửLýNhanh", "#TốcĐộCao", "#HiệuSuấtVượtTrội", "#PhảnHồiTứcThì"])
         elif any(word in content_lower for word in ['hỗ trợ', 'tư vấn', 'đồng hành']):
-            base_tags.extend(["#HỗTrợ24/7", "#ChămSócKháchHàng", "#TưVấnChuyênSâu"])
+            base_tags.extend(["#HỗTrợ24/7", "#ChămSócKháchHàng", "#TưVấnChuyênSâu", "#ĐồngHànhCùngBạn"])
         elif any(word in content_lower for word in ['ổn định', 'liên tục', 'thông suốt']):
-            base_tags.extend(["#ỔnĐịnhTuyệtĐối", "#KếtNốiLiềnMạch", "#HiệuQuảCao"])
+            base_tags.extend(["#ỔnĐịnhTuyệtĐối", "#KếtNốiLiềnMạch", "#HiệuQuảCao", "#HệThốngMạnhMẽ"])
         
         additional_tags = [
             "#UyTín", "#ChấtLượng", "#DịchVụ5Sao", "#GameThủ", 
             "#GiảiTríAnToàn", "#CôngNghệMới", "#ĐẳngCấpQuốcTế",
-            "#LinkChuẩn2025", "#HỗTrợNhanh", "#GiảiPhápToànDiện"
+            "#LinkChuẩn2025", "#HỗTrợNhanh", "#GiảiPhápToànDiện",
+            "#ChuyênNghiệp", "#TinCậy", "#MinhBạch", "#HiệuQuả"
         ]
         
-        base_tags.extend(random.sample(additional_tags, 4))
+        base_tags.extend(random.sample(additional_tags, 6))  # Tăng số hashtag
         return " ".join(base_tags)
 
     def generate_content(self, keyword, source, user_prompt):
-        # Tạo các thành phần thông minh
+        # Tạo các thành phần thông minh với nội dung dài hơn
         title = self.generate_smart_title()
         description = self.generate_contextual_description()
         benefits = self.generate_dynamic_benefits()
         cta = self.generate_smart_cta(description)
         hashtags = self.generate_hashtags(description)
         
-        # Xây dựng nội dung
+        # Xây dựng nội dung với phần mở rộng
         content = f"{title}\n\n"
         content += f"📞 #{keyword} ==> {source}\n\n"
         content += f"{description}\n\n"
+        
+        # Thêm phần giải thích về quy trình
+        process_templates = [
+            "Quy trình làm việc của chúng tôi được thiết kế để đảm bảo mọi vấn đề đều được xử lý một cách hệ thống và hiệu quả nhất.",
+            "Với phương châm 'khách hàng là trung tâm', mọi bước trong quy trình hỗ trợ đều được tối ưu để mang lại trải nghiệm tốt nhất.",
+            "Chúng tôi luôn cải tiến quy trình làm việc để đáp ứng nhanh chóng và chính xác mọi yêu cầu từ phía khách hàng.",
+            "Mỗi trường hợp đều được phân loại và xử lý theo quy trình chuẩn, đảm bảo tính nhất quán và hiệu quả trong giải pháp."
+        ]
+        
+        content += f"{random.choice(process_templates)}\n\n"
         
         content += "**Điểm nổi bật:**\n"
         for benefit in benefits:
@@ -388,8 +413,9 @@ class AIContentWriter:
         content += f"\n{cta}\n\n"
         
         content += "**Liên hệ hỗ trợ:**\n"
-        content += "📞 0027395058\n"
-        content += "📱 Telegram: @catten999\n\n"
+        content += "📞 Hotline: 0027395058 (Hỗ trợ 24/7)\n"
+        content += "📱 Telegram: @catten999\n"
+        content += "⏰ Thời gian làm việc: 24/7 - Kể cả ngày lễ\n\n"
         
         content += f"{hashtags}"
         
@@ -1050,7 +1076,7 @@ def _hashtags_for(keyword: str):
 
 _client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# ------------------------ AI Generate (Phiên bản thông minh) ------------------------
+# ------------------------ AI Generate (Phiên bản đã sửa với retry mechanism) ------------------------
 
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
@@ -1071,38 +1097,50 @@ def api_ai_generate():
         return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"}), 400
 
     try:
-        # Sử dụng AI Content Writer thông minh
+        # Sử dụng AI Content Writer thông minh với cơ chế retry
         writer = AIContentWriter(openai_client=_client)
-        content = writer.generate_content(keyword, source, user_prompt)
-        
-        # Kiểm tra độ dài
-        word_count = len(content.split())
-        if word_count < BODY_MIN_WORDS or word_count > BODY_MAX_WORDS:
-            return jsonify({
-                "error": f"Nội dung không đúng độ dài ({word_count} từ). Yêu cầu: {BODY_MIN_WORDS}-{BODY_MAX_WORDS} từ"
-            }), 400
-
-        # Anti-dup check
         corpus = _uniq_load_corpus()
         history = corpus.get(page_id) or []
-        if ANTI_DUP_ENABLED and _uniq_too_similar(_uniq_norm(content), history):
-            return jsonify({
-                "error": "Nội dung quá giống với bài trước. Vui lòng thử lại."
-            }), 409
-
-        # Lưu vào corpus
-        _uniq_store(page_id, content)
         
+        MAX_ATTEMPTS = 3
+        last_error = None
+        
+        for attempt in range(MAX_ATTEMPTS):
+            content = writer.generate_content(keyword, source, user_prompt)
+            
+            # Kiểm tra độ dài
+            word_count = len(content.split())
+            if word_count < BODY_MIN_WORDS:
+                last_error = f"Nội dung quá ngắn ({word_count} từ). Cần ít nhất {BODY_MIN_WORDS} từ."
+                continue
+            elif word_count > BODY_MAX_WORDS:
+                last_error = f"Nội dung quá dài ({word_count} từ). Tối đa {BODY_MAX_WORDS} từ."
+                continue
+
+            # Anti-dup check
+            if ANTI_DUP_ENABLED and _uniq_too_similar(_uniq_norm(content), history):
+                last_error = "Nội dung quá giống với bài trước"
+                continue
+
+            # Nếu đạt tất cả điều kiện
+            _uniq_store(page_id, content)
+            return jsonify({
+                "text": content,
+                "checks": {
+                    "similarity": "pass",
+                    "word_count": word_count,
+                    "attempts": attempt + 1
+                }
+            })
+        
+        # Nếu vượt quá số lần thử
         return jsonify({
-            "text": content,
-            "checks": {
-                "similarity": "pass",
-                "word_count": word_count
-            }
-        })
+            "error": f"Không thể tạo nội dung phù hợp sau {MAX_ATTEMPTS} lần thử",
+            "detail": last_error
+        }), 409
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Lỗi hệ thống: {str(e)}"}), 500
 
 # ------------------------ Upload Media ------------------------
 
