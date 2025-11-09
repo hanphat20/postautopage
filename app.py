@@ -201,6 +201,200 @@ def _decorate_emojis(text: str) -> str:
                     in_bullets = False
     return "\n".join(lines)
 
+# ------------------------ AI Content Writer (Phiên bản thông minh) ------------------------
+
+class AIContentWriter:
+    def __init__(self, openai_client):
+        self.client = openai_client
+        self.content_framework = {
+            'problems': {
+                'financial': ['mất điểm', 'khóa tài khoản', 'rút tiền thất bại', 'giao dịch treo', 'thất lạc giao dịch'],
+                'technical': ['bị chặn link', 'không thể truy cập', 'kết nối gián đoạn', 'lỗi kết nối', 'mất kết nối'],
+                'security': ['bảo mật', 'xác thực', 'bảo vệ tài khoản', 'đăng nhập thất bại']
+            },
+            'solutions': {
+                'speed': ['nhanh chóng', 'tức thì', 'trong tích tắc', 'ngay lập tức', 'khẩn trương'],
+                'quality': ['chuyên nghiệp', 'chính xác', 'tận tâm', 'chu đáo', 'tận tình'],
+                'security': ['bảo mật', 'an toàn', 'riêng tư', 'bí mật', 'bảo vệ']
+            },
+            'tones': {
+                'urgent': "🔴 Sự cố cần giải quyết NGAY?",
+                'friendly': "💬 Bạn đang gặp chút rắc rối?",
+                'professional': "⚡ Hỗ trợ chuyên nghiệp cho mọi vấn đề",
+                'reassuring': "🛡️ Đừng lo - Chúng tôi ở đây để giúp bạn",
+                'empowering': "🚀 Khắc phục mọi trở ngại cùng chuyên gia"
+            }
+        }
+        
+        self.benefit_variations = [
+            {"icon": "🚀", "keywords": ["tốc độ", "nhanh", "khẩn"]},
+            {"icon": "🛡️", "keywords": ["bảo mật", "an toàn", "riêng tư"]},
+            {"icon": "📞", "keywords": ["24/7", "hỗ trợ", "tư vấn"]},
+            {"icon": "🔄", "keywords": ["theo sát", "đồng hành", "xuyên suốt"]},
+            {"icon": "💯", "keywords": ["miễn phí", "chất lượng", "uy tín"]},
+            {"icon": "✅", "keywords": ["cam kết", "hoàn tất", "triệt để"]},
+            {"icon": "🌐", "keywords": ["ổn định", "liên tục", "thông suốt"]},
+            {"icon": "⚡", "keywords": ["xử lý", "phản hồi", "khẩn cấp"]},
+            {"icon": "👨‍💼", "keywords": ["chuyên gia", "chuyên nghiệp", "kinh nghiệm"]},
+            {"icon": "🔐", "keywords": ["mã hóa", "bảo vệ", "an ninh"]}
+        ]
+
+    def generate_smart_title(self):
+        base_templates = [
+            "❖ {year} - {feature1} & {feature2} | Kết nối {quality}",
+            "❖ Trải nghiệm {adjective} {year} - {benefit}",
+            "❖ {platform} {year} - {promise1} và {promise2}",
+            "❖ Gateway {year}: {focus} với {advantage}",
+            "❖ {platform} Premium {year}: {value1} + {value2}",
+            "❖ Nâng cấp {year} - {improvement1} và {improvement2}"
+        ]
+        
+        features = ["Bảo mật tối đa", "Tốc độ cao", "Ổn định tuyệt đối", "Kết nối thông minh", "Hỗ trợ chuyên sâu"]
+        qualities = ["mượt mà", "liền mạch", "an toàn", "nhanh chóng", "ổn định"]
+        adjectives = ["vượt trội", "khác biệt", "ưu việt", "hoàn hảo", "cao cấp"]
+        benefits = ["bảo mật đỉnh cao", "tốc độ vượt trội", "trải nghiệm mượt mà", "hỗ trợ tức thì"]
+        
+        template = random.choice(base_templates)
+        return template.format(
+            year="2025",
+            feature1=random.choice(features),
+            feature2=random.choice(features),
+            quality=random.choice(qualities),
+            adjective=random.choice(adjectives),
+            benefit=random.choice(benefits),
+            platform="JB88",
+            promise1=random.choice(["Kết nối bảo mật", "Đường link chính chủ", "Truy cập an toàn"]),
+            promise2=random.choice(["hỗ trợ 24/7", "xử lý tức thì", "giải pháp toàn diện"]),
+            focus=random.choice(["Bảo mật", "Tốc độ", "Ổn định", "Hiệu suất"]),
+            advantage=random.choice(["công nghệ mới", "đội ngũ chuyên gia", "hệ thống tối ưu", "giải pháp thông minh"]),
+            value1=random.choice(["Bảo mật cấp cao", "Tốc độ vượt trội"]),
+            value2=random.choice(["Hỗ trợ chuyên sâu", "Trải nghiệm cá nhân hóa"]),
+            improvement1=random.choice(["tốc độ xử lý", "bảo mật dữ liệu", "trải nghiệm người dùng"]),
+            improvement2=random.choice(["độ ổn định", "khả năng tiếp cận", "hỗ trợ khách hàng"])
+        )
+
+    def generate_contextual_description(self):
+        problem_type = random.choice(list(self.content_framework['problems'].keys()))
+        problems = self.content_framework['problems'][problem_type]
+        
+        solution_type = random.choice(list(self.content_framework['solutions'].keys()))
+        solutions = self.content_framework['solutions'][solution_type]
+        
+        tone = random.choice(list(self.content_framework['tones'].values()))
+        
+        description_templates = [
+            f"{tone} Đang gặp vấn đề về **{', '.join(random.sample(problems, 2))}**? Đội ngũ của chúng tôi cam kết giải quyết {random.choice(solutions)} với quy trình chuyên nghiệp và bảo mật.",
+            
+            f"Không thể **{random.choice(problems)}**? Đừng để điều này làm gián đoạn trải nghiệm của bạn! Hệ thống hỗ trợ {random.choice(solutions)} của chúng tôi luôn sẵn sàng.",
+            
+            f"Từ **{problems[0]}** đến **{problems[-1]}** - mọi thách thức đều có giải pháp. Phương châm của chúng tôi: xử lý {random.choice(solutions)} - bảo mật tuyệt đối.",
+            
+            f"Trải nghiệm dịch vụ {random.choice(solutions)} đẳng cấp. Dù bạn đang đối mặt với **{random.choice(problems)}** hay bất kỳ vấn đề nào khác, chúng tôi đều có giải pháp phù hợp.",
+            
+            f"**{random.choice(problems).title()}** làm phiền bạn? Đội ngũ chuyên gia của chúng tôi đã sẵn sàng hỗ trợ {random.choice(solutions)} và hiệu quả.",
+            
+            f"Đừng để **{random.choice(problems)}** cản trở niềm vui của bạn! Giải pháp {random.choice(solutions)} chỉ cách bạn một cuộc gọi."
+        ]
+        
+        return random.choice(description_templates)
+
+    def generate_dynamic_benefits(self):
+        num_benefits = random.randint(4, 6)
+        selected_benefits = random.sample(self.benefit_variations, num_benefits)
+        
+        benefit_texts = []
+        for benefit in selected_benefits:
+            base_text = benefit['keywords'][0]
+            if len(benefit['keywords']) > 1:
+                modifier = random.choice(benefit['keywords'][1:])
+                templates = [
+                    f"{base_text} {modifier}",
+                    f"{modifier} trong {base_text}",
+                    f"đảm bảo {base_text} {modifier}",
+                    f"{modifier} - {base_text} tuyệt đối",
+                    f"giải pháp {base_text} {modifier}"
+                ]
+                text = random.choice(templates)
+            else:
+                text = base_text
+                
+            benefit_texts.append(f"{benefit['icon']} {text.title()}")
+        
+        return benefit_texts
+
+    def generate_smart_cta(self, context):
+        urgent_keywords = ['khẩn', 'ngay lập tức', 'tức thì', 'gấp', 'khẩn cấp']
+        is_urgent = any(keyword in context.lower() for keyword in urgent_keywords)
+        
+        if is_urgent:
+            ctas = [
+                "⏰ **Thời gian là vàng!** Liên hệ ngay để được ưu tiên xử lý.",
+                "🚨 **Tình huống khẩn cấp?** Phản hồi ngay lập tức khi bạn liên hệ.",
+                "⚡ **Cần giải quyết gấp?** Chúng tôi ưu tiên các trường hợp như bạn.",
+                "🔴 **Không thể chờ đợi?** Hỗ trợ tức thì - gọi ngay!",
+                "💥 **Vấn đề cấp bách?** Đội đặc nhiệm sẵn sàng hỗ trợ ngay!"
+            ]
+        else:
+            ctas = [
+                "💬 **Sẵn sàng hỗ trợ!** Để lại thông tin để được tư vấn chi tiết.",
+                "🤝 **Kết nối ngay hôm nay** để trải nghiệm dịch vụ đẳng cấp.",
+                "📞 **Đừng ngần ngại** - Đội ngũ chuyên gia luôn sẵn sàng lắng nghe.",
+                "🌟 **Bắt đầu ngay** - Giải pháp hoàn hảo đang chờ bạn.",
+                "🎯 **Hành động ngay** để có trải nghiệm tốt nhất."
+            ]
+        
+        return random.choice(ctas)
+
+    def generate_hashtags(self, content):
+        base_tags = ["#jb88hàily", "#JB88hÀILY", "#LinkChínhThứcjb88hàily"]
+        
+        content_lower = content.lower()
+        
+        if any(word in content_lower for word in ['bảo mật', 'an toàn', 'riêng tư']):
+            base_tags.extend(["#BảoMậtTốiĐa", "#AnToànTuyệtĐối", "#BảoVệThôngMinh"])
+        elif any(word in content_lower for word in ['nhanh', 'tốc độ', 'khẩn']):
+            base_tags.extend(["#XửLýNhanh", "#TốcĐộCao", "#HiệuSuấtVượtTrội"])
+        elif any(word in content_lower for word in ['hỗ trợ', 'tư vấn', 'đồng hành']):
+            base_tags.extend(["#HỗTrợ24/7", "#ChămSócKháchHàng", "#TưVấnChuyênSâu"])
+        elif any(word in content_lower for word in ['ổn định', 'liên tục', 'thông suốt']):
+            base_tags.extend(["#ỔnĐịnhTuyệtĐối", "#KếtNốiLiềnMạch", "#HiệuQuảCao"])
+        
+        additional_tags = [
+            "#UyTín", "#ChấtLượng", "#DịchVụ5Sao", "#GameThủ", 
+            "#GiảiTríAnToàn", "#CôngNghệMới", "#ĐẳngCấpQuốcTế",
+            "#LinkChuẩn2025", "#HỗTrợNhanh", "#GiảiPhápToànDiện"
+        ]
+        
+        base_tags.extend(random.sample(additional_tags, 4))
+        return " ".join(base_tags)
+
+    def generate_content(self, keyword, source, user_prompt):
+        # Tạo các thành phần thông minh
+        title = self.generate_smart_title()
+        description = self.generate_contextual_description()
+        benefits = self.generate_dynamic_benefits()
+        cta = self.generate_smart_cta(description)
+        hashtags = self.generate_hashtags(description)
+        
+        # Xây dựng nội dung
+        content = f"{title}\n\n"
+        content += f"📞 #{keyword} ==> {source}\n\n"
+        content += f"{description}\n\n"
+        
+        content += "**Điểm nổi bật:**\n"
+        for benefit in benefits:
+            content += f"- {benefit}\n"
+        
+        content += f"\n{cta}\n\n"
+        
+        content += "**Liên hệ hỗ trợ:**\n"
+        content += "📞 0027395058\n"
+        content += "📱 Telegram: @catten999\n\n"
+        
+        content += f"{hashtags}"
+        
+        return content
+
 # ------------------------ Frontend (HTML+JS) ------------------------
 
 INDEX_HTML = r"""<!doctype html>
@@ -856,7 +1050,7 @@ def _hashtags_for(keyword: str):
 
 _client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# ------------------------ AI Generate ------------------------
+# ------------------------ AI Generate (Phiên bản thông minh) ------------------------
 
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
@@ -876,129 +1070,39 @@ def api_ai_generate():
     if not (keyword or source):
         return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"}), 400
 
-    hashtags_hint = _hashtags_for(keyword)
-
-    salt_style = random.choice(["năng động", "ấm áp", "quyết đoán", "tinh gọn", "thân thiện"])
-    salt_cta = random.choice(["Liên hệ ngay", "Nhắn ngay", "Gọi ngay", "Kết nối ngay", "Trao đổi ngay"])
-    salt_id = uuid.uuid4().hex[:8]
-
-    system_msg = (
-        "Bạn là copywriter tiếng Việt. Viết tự nhiên, xưng 'bạn', tập trung kết quả & CTA. "
-        "Không đạo văn; diễn đạt mới, tránh lặp."
-    )
-
-    keyword_tag = (keyword or "toolgame").strip().replace(" ", "").lower()
-
-    user_msg = f"""
-(độ dài ngắn gọn; {salt_style}; id:{salt_id})
-Nhiệm vụ: Viết post Facebook xưng 'bạn' về hỗ trợ xử lý mất điểm/khoá TK/chặn link, hướng dẫn khiếu nại đúng quy trình, theo sát đến khi xong; bảo mật; ưu tiên ca gấp.
-
-DỮ LIỆU
-- keyword: {keyword or "(trống)"}
-- source: {source or "(trống)"}
-- prompt thêm: {user_prompt or "(trống)"}
-
-CẤU TRÚC BẮT BUỘC:
-1) Dòng 1: Câu khẳng định link chính thức/không bị chặn/chuẩn 2025/an toàn/chính xác (CHO PHÉP emoji đầu dòng).
-2) Dòng 2: Dạng: "#{keyword_tag} ==> {source or '(chưa cấu hình)'}" (CHO PHÉP 1 emoji đầu dòng).
-
-3) THÂN BÀI: {BODY_MIN_WORDS}–{BODY_MAX_WORDS} từ (4–10 dòng), diễn đạt linh hoạt; có thể dùng 1–3 emoji NHẸ; nêu rõ cách làm việc nhanh gọn, cập nhật tiến độ, bảo mật.
-
-4) CHÈN 1 KHỐI MỞ RỘNG (2–5 dòng, chọn 1):
-   - Cam kết: bảo mật, minh bạch, ưu tiên ca gấp, theo sát đến khi hoàn tất.
-   - Quy trình nhanh 3 bước: (a) nộp hồ sơ/bằng chứng, (b) rà soát + hướng dẫn khiếu nại đúng mẫu, (c) theo dõi & chốt kết quả.
-   - Phạm vi hỗ trợ: mất điểm, khoá tài khoản, rút tiền, chặn link, tranh chấp (viết tự nhiên).
-
-5) Tiêu đề "Thông tin quan trọng:" rồi 4–6 bullet ngắn (có thể emoji): hỗ trợ 24/7; bảo mật; link chính chủ/ổn định; xử lý nhanh/ưu tiên hồ sơ; theo sát đến khi hoàn tất; tư vấn miễn phí; cập nhật trạng thái minh bạch.
-
-6) 1 dòng tổng hợp vấn đề: "Bạn gặp: mất điểm • khoá tài khoản • rút tiền • bị chặn link • tranh chấp?" + CTA: "{salt_cta} qua hotline/Telegram để được ưu tiên hỗ trợ."
-7) "Liên hệ hỗ trợ:" 2 dòng:
-   - 0927395058
-   - Telegram: @cattien999
-8) {hashtags_hint}
-
-QUY TẮC ĐA DẠNG:
-- Diễn đạt tự nhiên; đảo trật tự mệnh đề, thay đồng nghĩa; có thể xen 1–2 từ tiếng Anh phổ thông nếu hợp ngữ cảnh.
-- Không sao chép 100% một bản trước đó; ưu tiên biến hoá cụm từ và nhịp câu.
-- Không dùng emoji ở cuối 2 dòng đầu (emoji đặt đầu dòng đã đủ).
-- KHÔNG THÊM dòng "Chơi có trách nhiệm" hoặc cảnh báo tương tự.
-- KHÔNG THÊM chữ "Hashtags:" - chỉ để các hashtag thôi.
-""".strip()
-
-    MAX_TRIES = MAX_TRIES_ENV
-    corpus = _uniq_load_corpus()
-    history = corpus.get(page_id) or []
-    last_err = None
-
     try:
-        for attempt in range(MAX_TRIES):
-            resp = _client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=[{"role":"system","content":system_msg},
-                         {"role":"user","content":user_msg}],
-                temperature=1.05,
-                top_p=0.95,
-                max_tokens=700,
-                presence_penalty=0.9,
-                frequency_penalty=0.7
-            )
-            text = (resp.choices[0].message.content or "").strip()
-            lines = [re.sub(r"\s+$","",ln) for ln in text.splitlines()]
-
-            # 2 dòng đầu + icon linh hoạt
-            icon_head = _pick(EMOJI_HEADLINE, 1)[0]
-            icon_hash = _pick(EMOJI_HASHTAG, 1)[0]
-            
-            headline_variants = [
-                "Link chính thức – không bị chặn, chuẩn 2025, an toàn & chính xác.",
-                "Link chính thức 2025 – không bị chặn, truy cập an toàn.",
-                "Link chuẩn 2025 – chính xác, an toàn, truy cập ổn định.",
-                "Link chính thức – an toàn, chính xác, hoạt động ổn định 2025.",
-                "Link chuẩn – không bị chặn, đúng bản 2025."
-            ]
-            headline_line = f"{icon_head} " + random.choice(headline_variants)
-            keyword_tag_line = f"{icon_hash} #{keyword_tag} ==> {source or '(chưa cấu hình)'}"
-
-            # Đảm bảo có đủ 2 dòng
-            if len(lines) < 2:
-                lines += [""] * (2 - len(lines))
-            lines[0] = headline_line
-            lines[1] = keyword_tag_line
-            
-            text = "\n".join(lines).strip()
-
-            # Kiểm tra độ dài
-            word_count = len(text.split())
-            if word_count < BODY_MIN_WORDS or word_count > BODY_MAX_WORDS:
-                last_err = {"reason": "word_count", "current": word_count, "attempt": attempt + 1}
-                continue
-
-            # Trang trí emoji thân bài + bullets
-            text = _decorate_emojis(text)
-
-            # Anti-dup
-            if ANTI_DUP_ENABLED and _uniq_too_similar(_uniq_norm(text), history):
-                last_err = {"reason": "similar", "attempt": attempt + 1}
-                continue
-
-            _uniq_store(page_id, text)
+        # Sử dụng AI Content Writer thông minh
+        writer = AIContentWriter(openai_client=_client)
+        content = writer.generate_content(keyword, source, user_prompt)
+        
+        # Kiểm tra độ dài
+        word_count = len(content.split())
+        if word_count < BODY_MIN_WORDS or word_count > BODY_MAX_WORDS:
             return jsonify({
-                "text": text, 
-                "checks": {
-                    "similarity": "pass",
-                    "word_count": word_count,
-                    "attempts": attempt + 1
-                }
-            })
-            
-    except Exception as e:
-        last_err = {"error": str(e)}
+                "error": f"Nội dung không đúng độ dài ({word_count} từ). Yêu cầu: {BODY_MIN_WORDS}-{BODY_MAX_WORDS} từ"
+            }), 400
 
-    return jsonify({
-        "error": "Không thể tạo bài đủ khác biệt, hãy thử lại.", 
-        "detail": last_err,
-        "max_attempts": MAX_TRIES
-    }), 409
+        # Anti-dup check
+        corpus = _uniq_load_corpus()
+        history = corpus.get(page_id) or []
+        if ANTI_DUP_ENABLED and _uniq_too_similar(_uniq_norm(content), history):
+            return jsonify({
+                "error": "Nội dung quá giống với bài trước. Vui lòng thử lại."
+            }), 409
+
+        # Lưu vào corpus
+        _uniq_store(page_id, content)
+        
+        return jsonify({
+            "text": content,
+            "checks": {
+                "similarity": "pass",
+                "word_count": word_count
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ------------------------ Upload Media ------------------------
 
