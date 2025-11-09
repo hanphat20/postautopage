@@ -839,13 +839,15 @@ def _hashtags_for(keyword: str):
         f"#RútTiền{kw_clean}",
         f"#MởKhóaTàiKhoản{kw_clean}",
     ]
+    # ĐÃ LOẠI BỎ CÁC HASHTAG LIÊN QUAN ĐẾN TOOL VÀ BACCARAT
     topical = [
         "#UyTinChinhChu","#HoTroNhanh","#CSKH24h","#KhongBiChan","#LinkChuan2025",
-        "#ToolGame","#ToolHieuQua","#TuVanMienPhi","#BaoMatCao","#AnToanThongTin",
+        "#TuVanMienPhi","#BaoMatCao","#AnToanThongTin",
         "#RutTienThanhCong","#MoKhoaTaiKhoan","#KhieuNaiTranhChap","#HoanTien",
-        "#NoHu","#ToolNoHu","#ToolBaccarat","#ToolBaccaratNoHu","#GameChinhChu",
-        "#GameUyTin","#CongCuChienThang","#KinhNghiemChoi","#LoiIchNguoiChoi",
-        "#RutTienNhanh","#BaoMat","#TrangThaiRanhMach","#UpdateTienDo"
+        "#GameChinhChu","#GameUyTin","#LoiIchNguoiChoi",
+        "#RutTienNhanh","#BaoMat","#TrangThaiRanhMach","#UpdateTienDo",
+        "#GiaiQuyetNhanh","#HoanThienDichVu","#ChamSocKhachHang","#TinTuong",
+        "#ChatLuongCao","#DichVuTot","#CamKetUyTin","#HoTro24h"
     ]
     random.shuffle(topical)
     picked = topical[:random.randint(10, 14)]
@@ -913,13 +915,14 @@ CẤU TRÚC BẮT BUỘC:
 7) "Liên hệ hỗ trợ:" 2 dòng:
    - 0927395058
    - Telegram: @cattien999
-8) 1 dòng cảnh báo: Chơi có trách nhiệm…
-9) "Hashtags:" + 1 dòng gồm danh sách hashtag: {hashtags_hint}
+8) {hashtags_hint}
 
 QUY TẮC ĐA DẠNG:
 - Diễn đạt tự nhiên; đảo trật tự mệnh đề, thay đồng nghĩa; có thể xen 1–2 từ tiếng Anh phổ thông nếu hợp ngữ cảnh.
 - Không sao chép 100% một bản trước đó; ưu tiên biến hoá cụm từ và nhịp câu.
 - Không dùng emoji ở cuối 2 dòng đầu (emoji đặt đầu dòng đã đủ).
+- KHÔNG THÊM dòng "Chơi có trách nhiệm" hoặc cảnh báo tương tự.
+- KHÔNG THÊM chữ "Hashtags:" - chỉ để các hashtag thôi.
 """.strip()
 
     MAX_TRIES = MAX_TRIES_ENV
@@ -942,7 +945,7 @@ QUY TẮC ĐA DẠNG:
             text = (resp.choices[0].message.content or "").strip()
             lines = [re.sub(r"\s+$","",ln) for ln in text.splitlines()]
 
-            # 2 dòng đầu + icon linh hoạt (ĐÃ BỎ DÒNG QUÀ TẶNG)
+            # 2 dòng đầu + icon linh hoạt
             icon_head = _pick(EMOJI_HEADLINE, 1)[0]
             icon_hash = _pick(EMOJI_HASHTAG, 1)[0]
             
@@ -961,7 +964,6 @@ QUY TẮC ĐA DẠNG:
                 lines += [""] * (2 - len(lines))
             lines[0] = headline_line
             lines[1] = keyword_tag_line
-            # BỎ DÒNG THỨ 3 (gift_line) - CHỈ CÒN 2 DÒNG
             
             text = "\n".join(lines).strip()
 
