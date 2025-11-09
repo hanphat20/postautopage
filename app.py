@@ -870,16 +870,15 @@ def api_ai_generate():
     settings = _load_settings()
     conf = settings.get(page_id) or {}
     keyword = (conf.get("keyword") or "").strip()
-    source  = (conf.get("source")  or "").strip()
+    source = (conf.get("source") or "").strip()
     if not (keyword or source):
         return jsonify({"error": "Page chưa có Từ khoá/Link nguồn trong Cài đặt"}), 400
 
-    giveaway_link = "https://sites.google.com/view/toolbacarat-nohu/"
     hashtags_hint = _hashtags_for(keyword)
 
     salt_style = random.choice(["năng động", "ấm áp", "quyết đoán", "tinh gọn", "thân thiện"])
-    salt_cta   = random.choice(["Liên hệ ngay", "Nhắn ngay", "Gọi ngay", "Kết nối ngay", "Trao đổi ngay"])
-    salt_id    = uuid.uuid4().hex[:8]
+    salt_cta = random.choice(["Liên hệ ngay", "Nhắn ngay", "Gọi ngay", "Kết nối ngay", "Trao đổi ngay"])
+    salt_id = uuid.uuid4().hex[:8]
 
     system_msg = (
         "Bạn là copywriter tiếng Việt. Viết tự nhiên, xưng 'bạn', tập trung kết quả & CTA. "
@@ -901,26 +900,26 @@ CẤU TRÚC BẮT BUỘC:
 1) Dòng 1: Câu khẳng định link chính thức/không bị chặn/chuẩn 2025/an toàn/chính xác (CHO PHÉP emoji đầu dòng).
 2) Dòng 2: Dạng: "#{keyword_tag} ==> {source or '(chưa cấu hình)'}" (CHO PHÉP 1 emoji đầu dòng).
 
-4) THÂN BÀI: {BODY_MIN_WORDS}–{BODY_MAX_WORDS} từ (4–10 dòng), diễn đạt linh hoạt; có thể dùng 1–3 emoji NHẸ; nêu rõ cách làm việc nhanh gọn, cập nhật tiến độ, bảo mật.
+3) THÂN BÀI: {BODY_MIN_WORDS}–{BODY_MAX_WORDS} từ (4–10 dòng), diễn đạt linh hoạt; có thể dùng 1–3 emoji NHẸ; nêu rõ cách làm việc nhanh gọn, cập nhật tiến độ, bảo mật.
 
-5) CHÈN 1 KHỐI MỞ RỘNG (2–5 dòng, chọn 1):
+4) CHÈN 1 KHỐI MỞ RỘNG (2–5 dòng, chọn 1):
    - Cam kết: bảo mật, minh bạch, ưu tiên ca gấp, theo sát đến khi hoàn tất.
    - Quy trình nhanh 3 bước: (a) nộp hồ sơ/bằng chứng, (b) rà soát + hướng dẫn khiếu nại đúng mẫu, (c) theo dõi & chốt kết quả.
    - Phạm vi hỗ trợ: mất điểm, khoá tài khoản, rút tiền, chặn link, tranh chấp (viết tự nhiên).
 
-6) Tiêu đề "Thông tin quan trọng:" rồi 4–6 bullet ngắn (có thể emoji): hỗ trợ 24/7; bảo mật; link chính chủ/ổn định; xử lý nhanh/ưu tiên hồ sơ; theo sát đến khi hoàn tất; tư vấn miễn phí; cập nhật trạng thái minh bạch.
+5) Tiêu đề "Thông tin quan trọng:" rồi 4–6 bullet ngắn (có thể emoji): hỗ trợ 24/7; bảo mật; link chính chủ/ổn định; xử lý nhanh/ưu tiên hồ sơ; theo sát đến khi hoàn tất; tư vấn miễn phí; cập nhật trạng thái minh bạch.
 
-7) 1 dòng tổng hợp vấn đề: "Bạn gặp: mất điểm • khoá tài khoản • rút tiền • bị chặn link • tranh chấp?" + CTA: "{salt_cta} qua hotline/Telegram để được ưu tiên hỗ trợ."
-8) "Liên hệ hỗ trợ:" 2 dòng:
+6) 1 dòng tổng hợp vấn đề: "Bạn gặp: mất điểm • khoá tài khoản • rút tiền • bị chặn link • tranh chấp?" + CTA: "{salt_cta} qua hotline/Telegram để được ưu tiên hỗ trợ."
+7) "Liên hệ hỗ trợ:" 2 dòng:
    - 0927395058
    - Telegram: @cattien999
-9) 1 dòng cảnh báo: Chơi có trách nhiệm…
-10) "Hashtags:" + 1 dòng gồm danh sách hashtag: {hashtags_hint}
+8) 1 dòng cảnh báo: Chơi có trách nhiệm…
+9) "Hashtags:" + 1 dòng gồm danh sách hashtag: {hashtags_hint}
 
 QUY TẮC ĐA DẠNG:
 - Diễn đạt tự nhiên; đảo trật tự mệnh đề, thay đồng nghĩa; có thể xen 1–2 từ tiếng Anh phổ thông nếu hợp ngữ cảnh.
 - Không sao chép 100% một bản trước đó; ưu tiên biến hoá cụm từ và nhịp câu.
-- Không dùng emoji ở cuối 3 dòng đầu (emoji đặt đầu dòng đã đủ).
+- Không dùng emoji ở cuối 2 dòng đầu (emoji đặt đầu dòng đã đủ).
 """.strip()
 
     MAX_TRIES = MAX_TRIES_ENV
@@ -929,11 +928,11 @@ QUY TẮC ĐA DẠNG:
     last_err = None
 
     try:
-        for _ in range(MAX_TRIES):
+        for attempt in range(MAX_TRIES):
             resp = _client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=[{"role":"system","content":system_msg},
-                          {"role":"user","content":user_msg}],
+                         {"role":"user","content":user_msg}],
                 temperature=1.05,
                 top_p=0.95,
                 max_tokens=700,
@@ -943,10 +942,10 @@ QUY TẮC ĐA DẠNG:
             text = (resp.choices[0].message.content or "").strip()
             lines = [re.sub(r"\s+$","",ln) for ln in text.splitlines()]
 
-            # 3 dòng đầu + icon linh hoạt
-            icon_head  = _pick(EMOJI_HEADLINE, 1)[0]
-            icon_hash  = _pick(EMOJI_HASHTAG, 1)[0]
-            icon_gift  = _pick(EMOJI_GIFT, 1)[0]
+            # 2 dòng đầu + icon linh hoạt (ĐÃ BỎ DÒNG QUÀ TẶNG)
+            icon_head = _pick(EMOJI_HEADLINE, 1)[0]
+            icon_hash = _pick(EMOJI_HASHTAG, 1)[0]
+            
             headline_variants = [
                 "Link chính thức – không bị chặn, chuẩn 2025, an toàn & chính xác.",
                 "Link chính thức 2025 – không bị chặn, truy cập an toàn.",
@@ -956,28 +955,48 @@ QUY TẮC ĐA DẠNG:
             ]
             headline_line = f"{icon_head} " + random.choice(headline_variants)
             keyword_tag_line = f"{icon_hash} #{keyword_tag} ==> {source or '(chưa cấu hình)'}"
-        
-            if len(lines) < 3:
-                lines += [""] * (3 - len(lines))
+
+            # Đảm bảo có đủ 2 dòng
+            if len(lines) < 2:
+                lines += [""] * (2 - len(lines))
             lines[0] = headline_line
             lines[1] = keyword_tag_line
-            lines[2] = gift_line
+            # BỎ DÒNG THỨ 3 (gift_line) - CHỈ CÒN 2 DÒNG
+            
             text = "\n".join(lines).strip()
+
+            # Kiểm tra độ dài
+            word_count = len(text.split())
+            if word_count < BODY_MIN_WORDS or word_count > BODY_MAX_WORDS:
+                last_err = {"reason": "word_count", "current": word_count, "attempt": attempt + 1}
+                continue
 
             # Trang trí emoji thân bài + bullets
             text = _decorate_emojis(text)
 
             # Anti-dup
             if ANTI_DUP_ENABLED and _uniq_too_similar(_uniq_norm(text), history):
-                last_err = {"reason":"similar"}
+                last_err = {"reason": "similar", "attempt": attempt + 1}
                 continue
 
             _uniq_store(page_id, text)
-            return jsonify({"text": text, "checks": {"similarity": "pass"}})
+            return jsonify({
+                "text": text, 
+                "checks": {
+                    "similarity": "pass",
+                    "word_count": word_count,
+                    "attempts": attempt + 1
+                }
+            })
+            
     except Exception as e:
         last_err = {"error": str(e)}
 
-    return jsonify({"error":"Không thể tạo bài đủ khác biệt, hãy thử lại.", "detail": last_err}), 409
+    return jsonify({
+        "error": "Không thể tạo bài đủ khác biệt, hãy thử lại.", 
+        "detail": last_err,
+        "max_attempts": MAX_TRIES
+    }), 409
 
 # ------------------------ Upload Media ------------------------
 
