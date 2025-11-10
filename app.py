@@ -6,9 +6,12 @@ import csv
 import re
 import random
 import uuid
+import requests
 from collections import Counter
-from datetime import datetime, timedelta  # ĐÃ THÊM timedelta
+from datetime import datetime, timedelta
 from flask import Flask, Response, jsonify, make_response, request, send_from_directory
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # OpenAI
 try:
@@ -2080,6 +2083,30 @@ def api_settings_get():
             })
             
         return jsonify({"data": pages})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/settings/save", methods=["POST"])
+def api_settings_save():
+    """API lưu cài đặt"""
+    try:
+        data = request.get_json()
+        items = data.get("items", [])
+        
+        settings = _load_settings()
+        
+        for item in items:
+            pid = item.get("id")
+            if pid in PAGE_TOKENS:
+                settings[pid] = {
+                    "keyword": item.get("keyword", ""),
+                    "source": item.get("source", "")
+                }
+                
+        _save_settings(settings)
+        
+        return jsonify({"ok": True, "updated": len(items)})
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
