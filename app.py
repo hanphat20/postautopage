@@ -83,22 +83,32 @@ def _save_settings(data: dict):
         print(f"Error saving settings: {e}")
 
 def _load_tokens() -> dict:
-    """Tải tokens từ file tokens.json trong Render Secrets - ĐÃ SỬA"""
+    """Tải tokens từ file tokens.json trong Render Secrets - ĐÃ SỬA HOÀN TOÀN"""
     try:
         # Ưu tiên đọc từ Render Secrets
         secrets_path = "/etc/secrets/tokens.json"
         if os.path.exists(secrets_path):
+            print(f"🔍 Tìm thấy file tokens tại: {secrets_path}")
             with open(secrets_path, 'r', encoding='utf-8') as f:
                 tokens_data = json.load(f)
-                print(f"✅ Loaded tokens from Render Secrets: {secrets_path}")
+                print(f"✅ Đã load tokens từ Render Secrets")
                 
                 # Trích xuất page tokens từ cấu trúc JSON
                 if "pages" in tokens_data:
                     page_tokens = tokens_data["pages"]
-                    print(f"✅ Loaded {len(page_tokens)} page tokens from tokens.json")
+                    print(f"✅ Đã trích xuất {len(page_tokens)} page tokens từ tokens.json")
+                    
+                    # Debug: hiển thị thông tin token đầu tiên
+                    if page_tokens:
+                        first_page_id = list(page_tokens.keys())[0]
+                        first_token = page_tokens[first_page_id]
+                        print(f"🔍 Token mẫu: {first_token[:20]}...")
+                        print(f"📏 Độ dài token: {len(first_token)}")
+                        print(f"🔤 Bắt đầu bằng: '{first_token[:4]}'")
+                    
                     return page_tokens
                 else:
-                    print("❌ 'pages' key not found in tokens.json")
+                    print("❌ Không tìm thấy key 'pages' trong tokens.json")
                     return {}
         
         # Fallback: đọc từ biến môi trường
@@ -114,12 +124,14 @@ def _load_tokens() -> dict:
         # Fallback cuối cùng cho demo
         print("⚠️ Using demo tokens - No tokens file found")
         return {
-            "demo_page_1": "EAAG...demo_token_1...",
-            "demo_page_2": "EAAG...demo_token_2..."
+            "demo_page_1": "EAA...demo_token_1...",
+            "demo_page_2": "EAA...demo_token_2..."
         }
         
     except Exception as e:
-        print(f"❌ Error loading tokens: {e}")
+        print(f"❌ Lỗi khi load tokens: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
 
 PAGE_TOKENS = _load_tokens()
@@ -154,13 +166,12 @@ def fb_get(path: str, params: dict, timeout: int = 30) -> dict:
         # Ẩn token trong log
         debug_params = {k: '***' if 'token' in k.lower() else v for k, v in params.items()}
         print(f"🔍 Facebook API GET: {url}")
-        print(f"📋 Params: {debug_params}")
         
         r = session.get(url, params=params, timeout=timeout)
         r.raise_for_status()
         result = r.json()
         
-        print(f"✅ Facebook API response received")
+        print(f"✅ Facebook API response success")
         return result
         
     except requests.exceptions.HTTPError as e:
@@ -653,7 +664,7 @@ INDEX_HTML = r"""<!doctype html>
           html += `
             <label class="checkbox">
               <input type="checkbox" class="pg-checkbox" value="${page.id}" ${page.token_valid ? '' : 'disabled'}>
-              ${page.name} ${tokenStatus}
+              <strong>${page.name}</strong> ${tokenStatus}
               ${page.error ? `<br><small style="color:#dc3545">${page.error}</small>` : ''}
             </label>
           `;
@@ -1002,30 +1013,43 @@ def index():
 
 @app.route("/api/pages")
 def api_pages():
-    """API lấy danh sách pages với thông tin đầy đủ"""
+    """API lấy danh sách pages với thông tin đầy đủ - ĐÃ SỬA HOÀN TOÀN"""
     try:
         pages = []
+        valid_count = 0
+        
+        print(f"🔍 Bắt đầu kiểm tra {len(PAGE_TOKENS)} pages...")
+        
         for pid, token in PAGE_TOKENS.items():
             page_info = {
                 "id": pid,
-                "name": f"Page {pid}",
+                "name": f"Page {pid}",  # Mặc định
                 "token_valid": False,
                 "status": "unknown",
                 "error": None
             }
             
-            # Kiểm tra token cơ bản
-            if not token or not token.startswith("EAAG"):
+            # KIỂM TRA TOKEN CƠ BẢN - ĐÃ SỬA
+            if not token:
                 page_info["status"] = "token_invalid"
-                page_info["error"] = "Token format không hợp lệ"
+                page_info["error"] = "Token rỗng"
+                pages.append(page_info)
+                continue
+            
+            # Kiểm tra token bắt đầu bằng EAA (cả EAA và EAAG đều hợp lệ)
+            if not token.startswith("EAA"):
+                page_info["status"] = "token_invalid"
+                page_info["error"] = f"Token không bắt đầu bằng EAA (bắt đầu bằng: {token[:10]})"
                 pages.append(page_info)
                 continue
                 
             try:
+                print(f"🔍 Đang kiểm tra page {pid}...")
+                
                 # Thử lấy thông tin page từ Facebook
                 data = fb_get(pid, {
                     "access_token": token,
-                    "fields": "name,id,link"
+                    "fields": "name,id,link,fan_count"
                 })
                 
                 if "name" in data and "id" in data:
@@ -1033,9 +1057,13 @@ def api_pages():
                     page_info["token_valid"] = True
                     page_info["status"] = "connected"
                     page_info["link"] = data.get("link", f"https://facebook.com/{pid}")
+                    page_info["fan_count"] = data.get("fan_count", 0)
+                    valid_count += 1
+                    print(f"✅ Page {pid} kết nối thành công: {data['name']}")
                 else:
                     page_info["status"] = "api_error"
-                    page_info["error"] = "Facebook API trả về dữ liệu không hợp lệ"
+                    page_info["error"] = f"Facebook API trả về dữ liệu không hợp lệ: {data}"
+                    print(f"❌ Page {pid} API error: {data}")
                     
             except Exception as e:
                 error_msg = str(e)
@@ -1051,12 +1079,27 @@ def api_pages():
                     page_info["error"] = "Page ID không tồn tại"
                 elif "expired" in error_msg.lower():
                     page_info["error"] = "Token đã hết hạn"
+                elif "support" in error_msg.lower():
+                    page_info["error"] = "Token cần kiểm tra lại"
+                elif "must use page access token" in error_msg.lower():
+                    page_info["error"] = "Token không phải page token"
+                    
+                print(f"❌ Page {pid} lỗi: {error_msg}")
                     
             pages.append(page_info)
+            
+        # Thống kê
+        print(f"📊 KẾT QUẢ: {valid_count}/{len(pages)} tokens hợp lệ")
+        
+        # Sắp xếp: token hợp lệ lên đầu
+        pages.sort(key=lambda x: (not x["token_valid"], x["name"]))
             
         return jsonify({"data": pages})
         
     except Exception as e:
+        print(f"❌ Lỗi hệ thống trong api_pages: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": f"Lỗi hệ thống: {str(e)}"}), 500
 
 @app.route("/api/inbox/conversations")
@@ -1074,7 +1117,8 @@ def api_inbox_conversations():
                 continue
                 
             token = PAGE_TOKENS.get(pid)
-            if not token or not token.startswith("EAAG"):
+            # SỬA: kiểm tra EAA thay vì EAAG
+            if not token or not token.startswith("EAA"):
                 continue
                 
             try:
@@ -1087,7 +1131,9 @@ def api_inbox_conversations():
                 
                 for conv in data.get("data", []):
                     conv["page_id"] = pid
-                    conv["page_name"] = f"Page {pid}"
+                    # Lấy tên page từ PAGE_TOKENS hoặc dùng id
+                    page_name = f"Page {pid}"
+                    conv["page_name"] = page_name
                     conversations.append(conv)
                     
             except Exception as e:
@@ -1211,7 +1257,8 @@ def api_pages_post():
         
         for pid in pages:
             token = PAGE_TOKENS.get(pid)
-            if not token or not token.startswith("EAAG"):
+            # SỬA: kiểm tra EAA thay vì EAAG
+            if not token or not token.startswith("EAA"):
                 results.append({
                     "page_id": pid,
                     "error": "Token không hợp lệ",
@@ -1291,7 +1338,7 @@ def api_upload():
 @app.route("/health")
 def health_check():
     """Health check endpoint"""
-    valid_tokens = sum(1 for t in PAGE_TOKENS.values() if t and t.startswith("EAAG"))
+    valid_tokens = sum(1 for t in PAGE_TOKENS.values() if t and t.startswith("EAA"))
     
     return jsonify({
         "status": "healthy",
@@ -1315,11 +1362,11 @@ def api_debug_tokens():
             "page_id": pid,
             "token_preview": f"{token[:10]}...{token[-10:]}" if token else "empty",
             "token_length": len(token) if token else 0,
-            "is_eaag": token and token.startswith("EAAG")
+            "is_eaa": token and token.startswith("EAA")
         }
         
         # Test token
-        if token and token.startswith("EAAG"):
+        if token and token.startswith("EAA"):
             try:
                 test_data = fb_get("me", {
                     "access_token": token,
@@ -1435,12 +1482,12 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"📍 Port: {port}")
     print(f"📊 Total pages: {len(PAGE_TOKENS)}")
-    print(f"✅ Valid tokens: {sum(1 for t in PAGE_TOKENS.values() if t and t.startswith('EAAG'))}")
+    print(f"✅ Valid tokens: {sum(1 for t in PAGE_TOKENS.values() if t and t.startswith('EAA'))}")
     print(f"🤖 OpenAI: {'READY' if _client else 'DISABLED'}")
     print("=" * 60)
     print("🔍 Debug URLs:")
     print(f"   • Health check: http://0.0.0.0:{port}/health")
-    print(f"   • Pages API: http://0.0.0.0:{port}/api/pages")
+    print(f"   • Pages API: http://0.0.0.0:{port}/api/pages") 
     print(f"   • Debug tokens: http://0.0.0.0:{port}/api/debug/tokens")
     print("=" * 60)
     
