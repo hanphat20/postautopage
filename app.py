@@ -125,14 +125,33 @@ session.mount("https://", adapter)
 session.mount("http://", adapter)
 
 def fb_get(path: str, params: dict, timeout: int = 30) -> dict:
-    """GET request đến Facebook API"""
+    """GET request đến Facebook API với debug chi tiết"""
     url = f"{FB_API}/{path.lstrip('/')}"
     try:
+        # Ẩn token trong log
+        debug_params = {k: '***' if 'token' in k.lower() else v for k, v in params.items()}
+        print(f"🔍 Facebook API GET: {url}")
+        print(f"📋 Params: {debug_params}")
+        
         r = session.get(url, params=params, timeout=timeout)
         r.raise_for_status()
-        return r.json()
+        result = r.json()
+        
+        print(f"✅ Facebook API response received")
+        return result
+        
+    except requests.exceptions.HTTPError as e:
+        error_msg = f"Facebook API HTTP Error {e.response.status_code}: {e.response.text}"
+        print(f"❌ {error_msg}")
+        raise RuntimeError(error_msg)
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Facebook API Request failed: {str(e)}"
+        print(f"❌ {error_msg}")
+        raise RuntimeError(error_msg)
     except Exception as e:
-        raise RuntimeError(f"Facebook API GET failed: {str(e)}")
+        error_msg = f"Facebook API unexpected error: {str(e)}"
+        print(f"❌ {error_msg}")
+        raise RuntimeError(error_msg)
 
 def fb_post(path: str, data: dict, timeout: int = 30) -> dict:
     """POST request đến Facebook API"""
@@ -585,7 +604,7 @@ INDEX_HTML = r"""<!doctype html>
     });
   });
 
-  // Load pages with token status
+  // Load pages with token status - ĐÃ ĐƯỢC SỬA
   async function loadPages() {
     const boxes = ['#pages_box', '#post_pages_box'];
     const statuses = ['#inbox_pages_status', '#post_pages_status'];
@@ -612,7 +631,7 @@ INDEX_HTML = r"""<!doctype html>
             <label class="checkbox">
               <input type="checkbox" class="pg-checkbox" value="${page.id}" ${page.token_valid ? '' : 'disabled'}>
               ${page.name} ${tokenStatus}
-              ${!page.token_valid ? '<span style="color:#dc3545;font-size:11px"> (Token invalid)</span>' : ''}
+              ${page.error ? `<br><small style="color:#dc3545">${page.error}</small>` : ''}
             </label>
           `;
         });
@@ -629,7 +648,11 @@ INDEX_HTML = r"""<!doctype html>
           selectAll.onclick = () => {
             const checkboxes = $all(checkboxClass);
             const allChecked = checkboxes.every(cb => cb.checked);
-            checkboxes.forEach(cb => cb.checked = !allChecked);
+            checkboxes.forEach(cb => {
+              if (!cb.disabled) {
+                cb.checked = !allChecked;
+              }
+            });
           };
         }
       };
@@ -956,7 +979,7 @@ def index():
 
 @app.route("/api/pages")
 def api_pages():
-    """API lấy danh sách pages với thông tin đầy đủ"""
+    """API lấy danh sách pages với thông tin đầy đủ - ĐÃ ĐƯỢC SỬA"""
     try:
         pages = []
         for pid, token in PAGE_TOKENS.items():
@@ -964,32 +987,48 @@ def api_pages():
                 "id": pid,
                 "name": f"Page {pid}",
                 "token_valid": False,
-                "status": "unknown"
+                "status": "unknown",
+                "error": None
             }
             
-            # Kiểm tra token
+            # Kiểm tra token cơ bản
             if not token or not token.startswith("EAAG"):
                 page_info["status"] = "token_invalid"
+                page_info["error"] = "Token format không hợp lệ"
                 pages.append(page_info)
                 continue
                 
             try:
-                # Lấy thông tin page từ Facebook
+                # Thử lấy thông tin page từ Facebook
                 data = fb_get(pid, {
                     "access_token": token,
-                    "fields": "name,id"
+                    "fields": "name,id,link"
                 })
                 
-                if "name" in data:
+                if "name" in data and "id" in data:
                     page_info["name"] = data["name"]
                     page_info["token_valid"] = True
                     page_info["status"] = "connected"
+                    page_info["link"] = data.get("link", f"https://facebook.com/{pid}")
                 else:
                     page_info["status"] = "api_error"
+                    page_info["error"] = "Facebook API trả về dữ liệu không hợp lệ"
                     
             except Exception as e:
-                page_info["status"] = f"error: {str(e)[:100]}"
+                error_msg = str(e)
+                page_info["status"] = "error"
+                page_info["error"] = error_msg
                 
+                # Phân loại lỗi để dễ debug
+                if "access token" in error_msg.lower():
+                    page_info["error"] = "Token không hợp lệ hoặc đã hết hạn"
+                elif "permission" in error_msg.lower():
+                    page_info["error"] = "Token thiếu quyền truy cập"
+                elif "does not exist" in error_msg.lower():
+                    page_info["error"] = "Page ID không tồn tại"
+                elif "expired" in error_msg.lower():
+                    page_info["error"] = "Token đã hết hạn"
+                    
             pages.append(page_info)
             
         return jsonify({"data": pages})
@@ -1229,7 +1268,7 @@ def api_upload():
 @app.route("/health")
 def health_check():
     """Health check endpoint"""
-    valid_tokens = sum(1 for t in PAGE_TOKENS.values() if t.startswith("EAAG"))
+    valid_tokens = sum(1 for t in PAGE_TOKENS.values() if t and t.startswith("EAAG"))
     
     return jsonify({
         "status": "healthy",
@@ -1240,6 +1279,67 @@ def health_check():
         "openai_ready": _client is not None,
         "version": "AKUTA-2025-FULL"
     })
+
+# ------------------------ Debug APIs ------------------------
+
+@app.route("/api/debug/tokens")
+def api_debug_tokens():
+    """API debug để kiểm tra tất cả tokens"""
+    debug_info = []
+    
+    for pid, token in PAGE_TOKENS.items():
+        token_info = {
+            "page_id": pid,
+            "token_preview": f"{token[:10]}...{token[-10:]}" if token else "empty",
+            "token_length": len(token) if token else 0,
+            "is_eaag": token and token.startswith("EAAG")
+        }
+        
+        # Test token
+        if token and token.startswith("EAAG"):
+            try:
+                test_data = fb_get("me", {
+                    "access_token": token,
+                    "fields": "id,name"
+                })
+                token_info["test_result"] = "success"
+                token_info["user_info"] = test_data
+            except Exception as e:
+                token_info["test_result"] = "error"
+                token_info["error"] = str(e)
+        else:
+            token_info["test_result"] = "invalid_format"
+            
+        debug_info.append(token_info)
+    
+    return jsonify({"tokens": debug_info})
+
+@app.route("/api/test-token/<page_id>")
+def api_test_token(page_id):
+    """API test token cụ thể"""
+    try:
+        token = PAGE_TOKENS.get(page_id)
+        if not token:
+            return jsonify({"error": "Token không tồn tại"}), 400
+            
+        # Test basic token
+        data = fb_get("me", {
+            "access_token": token,
+            "fields": "id,name"
+        })
+        
+        return jsonify({
+            "page_id": page_id,
+            "token_valid": True,
+            "user_info": data
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "page_id": page_id,
+            "token_valid": False,
+            "error": str(e)
+        }), 400
 
 # ------------------------ Settings Management ------------------------
 
@@ -1312,8 +1412,13 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"📍 Port: {port}")
     print(f"📊 Total pages: {len(PAGE_TOKENS)}")
-    print(f"✅ Valid tokens: {sum(1 for t in PAGE_TOKENS.values() if t.startswith('EAAG'))}")
+    print(f"✅ Valid tokens: {sum(1 for t in PAGE_TOKENS.values() if t and t.startswith('EAAG'))}")
     print(f"🤖 OpenAI: {'READY' if _client else 'DISABLED'}")
+    print("=" * 60)
+    print("🔍 Debug URLs:")
+    print(f"   • Health check: http://0.0.0.0:{port}/health")
+    print(f"   • Pages API: http://0.0.0.0:{port}/api/pages")
+    print(f"   • Debug tokens: http://0.0.0.0:{port}/api/debug/tokens")
     print("=" * 60)
     
     app.run(host="0.0.0.0", port=port, debug=False)
