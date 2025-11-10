@@ -26,7 +26,7 @@ except ImportError:
 
 VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "AKUTA_2025_SECURE_TOKEN")
 SECRET_KEY = os.getenv("SECRET_KEY", "akuta_secure_key_2025")
-TOKENS_FILE = os.getenv("TOKENS_FILE", "/tmp/tokens.json")
+TOKENS_FILE = os.getenv("TOKENS_FILE", "/etc/secrets/tokens.json")
 DISABLE_SSE = os.getenv("DISABLE_SSE", "1") not in ("0", "false", "False")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -83,21 +83,44 @@ def _save_settings(data: dict):
         print(f"Error saving settings: {e}")
 
 def _load_tokens() -> dict:
-    """Tải tokens từ biến môi trường"""
-    env_json = os.getenv("PAGE_TOKENS")
-    if env_json:
-        try:
-            tokens = json.loads(env_json)
-            print(f"✅ Loaded {len(tokens)} tokens from environment")
-            return tokens
-        except Exception as e:
-            print(f"❌ Error parsing PAGE_TOKENS: {e}")
-    
-    # Fallback cho demo
-    return {
-        "demo_page_1": "EAAG...demo_token_1...",
-        "demo_page_2": "EAAG...demo_token_2..."
-    }
+    """Tải tokens từ file tokens.json trong Render Secrets - ĐÃ SỬA"""
+    try:
+        # Ưu tiên đọc từ Render Secrets
+        secrets_path = "/etc/secrets/tokens.json"
+        if os.path.exists(secrets_path):
+            with open(secrets_path, 'r', encoding='utf-8') as f:
+                tokens_data = json.load(f)
+                print(f"✅ Loaded tokens from Render Secrets: {secrets_path}")
+                
+                # Trích xuất page tokens từ cấu trúc JSON
+                if "pages" in tokens_data:
+                    page_tokens = tokens_data["pages"]
+                    print(f"✅ Loaded {len(page_tokens)} page tokens from tokens.json")
+                    return page_tokens
+                else:
+                    print("❌ 'pages' key not found in tokens.json")
+                    return {}
+        
+        # Fallback: đọc từ biến môi trường
+        env_json = os.getenv("PAGE_TOKENS")
+        if env_json:
+            try:
+                tokens = json.loads(env_json)
+                print(f"✅ Loaded {len(tokens)} tokens from environment")
+                return tokens
+            except Exception as e:
+                print(f"❌ Error parsing PAGE_TOKENS: {e}")
+        
+        # Fallback cuối cùng cho demo
+        print("⚠️ Using demo tokens - No tokens file found")
+        return {
+            "demo_page_1": "EAAG...demo_token_1...",
+            "demo_page_2": "EAAG...demo_token_2..."
+        }
+        
+    except Exception as e:
+        print(f"❌ Error loading tokens: {e}")
+        return {}
 
 PAGE_TOKENS = _load_tokens()
 
@@ -604,7 +627,7 @@ INDEX_HTML = r"""<!doctype html>
     });
   });
 
-  // Load pages with token status - ĐÃ ĐƯỢC SỬA
+  // Load pages with token status
   async function loadPages() {
     const boxes = ['#pages_box', '#post_pages_box'];
     const statuses = ['#inbox_pages_status', '#post_pages_status'];
@@ -979,7 +1002,7 @@ def index():
 
 @app.route("/api/pages")
 def api_pages():
-    """API lấy danh sách pages với thông tin đầy đủ - ĐÃ ĐƯỢC SỬA"""
+    """API lấy danh sách pages với thông tin đầy đủ"""
     try:
         pages = []
         for pid, token in PAGE_TOKENS.items():
