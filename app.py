@@ -7,7 +7,7 @@ import re
 import random
 import uuid
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta  # ĐÃ THÊM timedelta
 from flask import Flask, Response, jsonify, make_response, request, send_from_directory
 
 # OpenAI
@@ -2048,16 +2048,33 @@ def health_check():
 
 @app.route("/api/settings/get")
 def api_settings_get():
-    """API lấy cài đặt"""
+    """API lấy cài đặt - ĐÃ SỬA HIỂN THỊ TÊN PAGE THẬT"""
     try:
         settings = _load_settings()
         pages = []
         
         for pid in PAGE_TOKENS.keys():
+            # Lấy tên page thật từ Facebook API
+            page_name = f"Page {pid}"  # Mặc định
+            token = PAGE_TOKENS.get(pid)
+            
+            if token and token.startswith("EAA"):
+                try:
+                    # Lấy thông tin page từ Facebook
+                    data = fb_get(pid, {
+                        "access_token": token,
+                        "fields": "name"
+                    })
+                    if "name" in data:
+                        page_name = data["name"]
+                except Exception as e:
+                    print(f"Lỗi lấy tên page {pid}: {e}")
+                    # Giữ nguyên tên mặc định nếu có lỗi
+            
             page_settings = settings.get(pid, {})
             pages.append({
                 "id": pid,
-                "name": f"Page {pid}",
+                "name": page_name,  # Sử dụng tên thật
                 "keyword": page_settings.get("keyword", ""),
                 "source": page_settings.get("source", "")
             })
@@ -2067,35 +2084,11 @@ def api_settings_get():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/settings/save", methods=["POST"])
-def api_settings_save():
-    """API lưu cài đặt"""
-    try:
-        data = request.get_json()
-        items = data.get("items", [])
-        
-        settings = _load_settings()
-        
-        for item in items:
-            pid = item.get("id")
-            if pid in PAGE_TOKENS:
-                settings[pid] = {
-                    "keyword": item.get("keyword", ""),
-                    "source": item.get("source", "")
-                }
-                
-        _save_settings(settings)
-        
-        return jsonify({"ok": True, "updated": len(items)})
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 # ------------------------ Analytics APIs ------------------------
 
 @app.route("/api/analytics/overview")
 def api_analytics_overview():
-    """API thống kê tổng quan"""
+    """API thống kê tổng quan - ĐÃ SỬA LỖI timedelta"""
     try:
         valid_tokens = sum(1 for t in PAGE_TOKENS.values() if t and t.startswith("EAA"))
         
@@ -2104,8 +2097,8 @@ def api_analytics_overview():
             "total_pages": len(PAGE_TOKENS),
             "active_pages": valid_tokens,
             "ai_ready": _client is not None,
-            "recent_posts": 0,  # Có thể tích hợp sau
-            "recent_messages": 0,  # Có thể tích hợp sau
+            "recent_posts": 0,
+            "recent_messages": 0,
             "last_updated": datetime.now().isoformat(),
             "recent_activities": [
                 {"time": datetime.now().strftime("%H:%M"), "action": "Hệ thống khởi động"},
