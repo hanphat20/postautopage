@@ -7,12 +7,8 @@ import re
 import random
 import uuid
 from collections import Counter
-from datetime import datetime
-
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from flask import Flask, Response, jsonify, make_response, request
+from datetime import datetime, timedelta
+from flask import Flask, Response, jsonify, make_response, request, send_from_directory
 
 # OpenAI
 try:
@@ -197,125 +193,162 @@ def fb_post(path: str, data: dict, timeout: int = 30) -> dict:
     except Exception as e:
         raise RuntimeError(f"Facebook API POST failed: {str(e)}")
 
-# ------------------------ AI Content Generator ------------------------
+# ------------------------ SEO Content Generator ------------------------
+
+class SEOContentGenerator:
+    """Generator nội dung chuẩn SEO với hashtag tối ưu"""
+    
+    def __init__(self):
+        self.base_hashtags = [
+            "#{keyword}",
+            "#LinkChínhThức{keyword}",
+            "#{keyword}AnToàn", 
+            "#HỗTrợLấyLạiTiền{keyword}",
+            "#RútTiền{keyword}",
+            "#MởKhóaTàiKhoản{keyword}"
+        ]
+        
+        self.additional_hashtags = {
+            "casino": [
+                "#GameĐổiThưởng", "#CasinoOnline", "#CáCượcTrựcTuyến", "#NhàCáiUyTín",
+                "#SlotsGame", "#PokerOnline", "#Blackjack", "#Baccarat", "#Roulette",
+                "#ThểThaoẢo", "#Esports", "#NổHũ", "#GameBài", "#XócĐĩaOnline"
+            ],
+            "entertainment": [
+                "#GiảiTríOnline", "#GameMobile", "#QuayHũ", "#ĐánhBài", "#SlotGame",
+                "#Gaming", "#TròChơiOnline", "#GiảiTrí2025", "#FunGames", "#WinBig",
+                "#Jackpot", "#Bonus", "#KhuyếnMãi", "#ThưởngNóng", "#FreeSpin"
+            ],
+            "general": [
+                "#UyTín", "#BảoMật", "#NạpRútNhanh", "#HỗTrợ24/7", "#KhuyếnMãi",
+                "#ĐăngKýNgay", "#TrảiNghiệmMới", "#CơHộiTrúngLớn", "#ThắngLớn",
+                "#ChiếnThắng", "#MayMắn", "#TỷLệCao", "#MinRútThấp", "#ƯuĐãi"
+            ]
+        }
+    
+    def generate_seo_content(self, keyword, source, prompt=""):
+        """Tạo nội dung chuẩn SEO với hashtag tối ưu"""
+        
+        # Base content template
+        base_content = f"""🎯 **{keyword} - NỀN TẢNG GIẢI TRÍ ĐỈNH CAO 2025**
+
+🔗 **TRUY CẬP NGAY:** {source}
+
+Khám phá thế giới giải trí trực tuyến đẳng cấp với {keyword} - nền tảng được thiết kế dành riêng cho người chơi Việt Nam. Trải nghiệm dịch vụ chất lượng 5 sao với công nghệ bảo mật tối tân và hệ thống hỗ trợ chuyên nghiệp.
+
+✨ **ĐIỂM NỔI BẬT ĐỘC QUYỀN:**
+✅ BẢO MẬT ĐA TẦNG - An toàn tuyệt đối thông tin
+✅ TỐC ĐỘ SIÊU NHANH - Xử lý mọi giao dịch trong 3-5 phút
+✅ HỖ TRỢ 24/7 - Đội ngũ chuyên viên nhiệt tình, giàu kinh nghiệm
+✅ GIAO DIỆN THÂN THIỆN - Tương thích hoàn hảo với mọi thiết bị
+✅ KHUYẾN MÃI KHỦNG - Ưu đãi liên tục cho thành viên mới và cũ
+✅ RÚT TIỀN NHANH - Xử lý trong vòng 5 phút, không giới hạn số lần
+✅ MINH BẠCH TUYỆT ĐỐI - Công bằng trong mọi giao dịch và kết quả
+
+🎁 **ƯU ĐÃI ĐẶC BIỆT THÁNG NÀY:**
+⭐ TẶNG NGAY 150% cho lần nạp đầu tiên
+⭐ HOÀN TRẢ 1.5% không giới hạn mọi giao dịch
+⭐ VÉ QUAY MAY MẮN TRỊ GIÁ 10 TRIỆU ĐỒNG
+⭐ COMBO QUÀ TẶNG ĐỘC QUYỀN cho thành viên VIP
+
+📞 **HỖ TRỢ KHÁCH HÀNG CHUYÊN NGHIỆP:**
+• Hotline: 0027395058 (Hỗ trợ 24/7 kể cả ngày lễ)
+• Telegram: @catten999
+• Email: support@{keyword.lower()}.com
+• Thời gian làm việc: Tất cả các ngày trong tuần
+
+💫 ĐĂNG KÝ NGAY để không bỏ lỡ cơ hội trúng thưởng SIÊU KHỦNG!
+
+{self._generate_hashtags(keyword)}
+"""
+        
+        # Nếu có prompt từ user, thêm vào content
+        if prompt:
+            base_content += f"\n\n💡 **THÔNG TIN THÊM:** {prompt}"
+            
+        return base_content
+    
+    def _generate_hashtags(self, keyword):
+        """Tạo hashtag SEO tối ưu"""
+        # Base hashtags (6 hashtag cố định)
+        base_tags = [tag.format(keyword=keyword) for tag in self.base_hashtags]
+        
+        # Additional hashtags (chọn ngẫu nhiên 10-15 hashtag)
+        all_additional = (
+            self.additional_hashtags["casino"] + 
+            self.additional_hashtags["entertainment"] + 
+            self.additional_hashtags["general"]
+        )
+        selected_additional = random.sample(all_additional, min(12, len(all_additional)))
+        
+        # Kết hợp tất cả hashtag
+        all_hashtags = base_tags + selected_additional
+        
+        # Đảm bảo không trùng lặp
+        unique_hashtags = list(dict.fromkeys(all_hashtags))
+        
+        return " ".join(unique_hashtags)
 
 class AIContentWriter:
     def __init__(self, openai_client):
         self.client = openai_client
+        self.seo_generator = SEOContentGenerator()
         
     def generate_content(self, keyword, source, user_prompt=""):
-        """Tạo nội dung bằng OpenAI"""
+        """Tạo nội dung bằng OpenAI với tối ưu SEO"""
         try:
             prompt = f"""
-            Hãy tạo một bài đăng Facebook về {keyword} với các yêu cầu:
-            - Độ dài: 160-260 từ
-            - Ngôn ngữ: Tiếng Việt tự nhiên
-            - Nội dung: Quảng cáo dịch vụ giải trí trực tuyến
-            - Cần có: tiêu đề hấp dẫn, điểm nổi bật, thông tin liên hệ
-            - Link: {source}
-            - Hashtags phù hợp
+            Hãy tạo một bài đăng Facebook CHUẨN SEO về {keyword} với các yêu cầu:
             
-            Yêu cầu thêm: {user_prompt}
+            **YÊU CẦU BẮT BUỘC:**
+            - Độ dài: 180-280 từ (tối ưu cho Facebook)
+            - Ngôn ngữ: Tiếng Việt tự nhiên, thu hút, kích thích tương tác
+            - Nội dung: Quảng cáo dịch vụ giải trí trực tuyến NHƯNG TUYỆT ĐỐI KHÔNG VI PHẠM CHÍNH SÁCH
+            - Cấu trúc: Tiêu đề hấp dẫn → Giới thiệu ngắn → Điểm nổi bật → Ưu đãi → Thông tin liên hệ
+            - Link: {source}
+            
+            **LƯU Ý QUAN TRỌNG:**
+            - KHÔNG dùng từ ngữ nhạy cảm, cờ bạc trực tiếp
+            - Tập trung vào "giải trí", "trò chơi", "trải nghiệm"
+            - Nhấn mạnh yếu tố BẢO MẬT, UY TÍN, HỖ TRỢ 24/7
+            - Tự nhiên, không spam, không cảm giác quảng cáo quá lố
+            
+            **HASHTAG (QUAN TRỌNG):**
+            BẮT BUỘC phải có 6 hashtag chính:
+            #{keyword} #LinkChínhThức{keyword} #{keyword}AnToàn #HỗTrợLấyLạiTiền{keyword} #RútTiền{keyword} #MởKhóaTàiKhoản{keyword}
+            
+            Và thêm 10-15 hashtag phụ liên quan đến giải trí, game, casino online.
+            
+            Yêu cầu thêm từ người dùng: {user_prompt}
             """
             
             response = self.client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "Bạn là chuyên gia content marketing cho lĩnh vực giải trí trực tuyến."},
+                    {"role": "system", "content": "Bạn là chuyên gia content marketing SEO cho lĩnh vực giải trí trực tuyến. Bạn cực kỳ giỏi trong việc tạo nội dung thu hút mà không vi phạm chính sách."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=1000,
-                temperature=0.7
+                max_tokens=1200,
+                temperature=0.8
             )
             
             content = response.choices[0].message.content.strip()
             return content
             
         except Exception as e:
-            raise RuntimeError(f"AI generation failed: {str(e)}")
+            print(f"AI generation failed: {e}, falling back to SEO generator")
+            # Fallback to SEO generator
+            return self.seo_generator.generate_seo_content(keyword, source, user_prompt)
 
 class SimpleContentGenerator:
-    """Generator đơn giản không cần OpenAI"""
+    """Generator đơn giản không cần OpenAI - ĐÃ CẢI THIỆN SEO"""
     
     def __init__(self):
-        self.templates = [
-            """🚀 **JB88 - Nền Tảng Giải Trí Đỉnh Cao 2025**
-
-🔗 Truy cập ngay: {source}
-
-Trải nghiệm dịch vụ giải trí trực tuyến hàng đầu với công nghệ hiện đại và hệ thống bảo mật tối tân. JB88 cam kết mang đến cho bạn những giây phút thư giãn tuyệt vời nhất.
-
-✨ **ĐIỂM NỔI BẬT:**
-✅ Bảo mật đa tầng - An toàn tuyệt đối
-✅ Tốc độ xử lý siêu nhanh - Mượt mà không gián đoạn
-✅ Hỗ trợ 24/7 - Đội ngũ chuyên nghiệp, nhiệt tình
-✅ Giao diện thân thiện - Dễ dàng sử dụng trên mọi thiết bị
-✅ Nhiều ưu đãi hấp dẫn - Khuyến mãi liên tục cho thành viên
-✅ Rút tiền nhanh chóng - Xử lý trong vòng 5 phút
-✅ Minh bạch tuyệt đối - Công bằng trong mọi giao dịch
-
-📞 **THÔNG TIN LIÊN HỆ:**
-• Hotline: 0027395058 (Hỗ trợ 24/7)
-• Telegram: @catten999
-• Thời gian làm việc: Tất cả các ngày trong tuần
-
-🎯 Đừng bỏ lỡ cơ hội trải nghiệm dịch vụ đẳng cấp!
-
-#JB88 #GameOnline #2025 #UyTin #HoTro24h #BaoMatToiDa #RutTienNhanh""",
-
-            """🎯 **{keyword} - Đẳng Cấp Giải Trí Mới 2025**
-
-Khám phá ngay: {source}
-
-Tự hào là nền tảng giải trí hàng đầu, chúng tôi mang đến trải nghiệm khác biệt với công nghệ hiện đại và dịch vụ chuyên nghiệp. Mọi khoảnh khắc giải trí của bạn đều được đảm bảo an toàn và thú vị.
-
-🌟 **LỢI ÍCH NỔI BẬT:**
-🚀 Tốc độ vượt trội - Phản hồi tức thì
-🛡️ Bảo mật tuyệt đối - Bảo vệ thông tin cá nhân
-💯 Chất lượng đỉnh cao - Trải nghiệm mượt mà
-📱 Tương thích hoàn hảo - Mọi thiết bị, mọi lúc
-🎁 Khuyến mãi hấp dẫn - Ưu đãi không ngừng
-🔒 An toàn tuyệt đối - Cam kết minh bạch
-⚡ Hỗ trợ nhanh chóng - Giải quyết mọi vấn đề
-
-📞 **ĐỘI NGŨ HỖ TRỢ:**
-• Điện thoại: 0027395058 (24/7)
-• Telegram: @catten999
-• Hỗ trợ kỹ thuật: Luôn sẵn sàng
-
-💫 Tham gia ngay để không bỏ lỡ những ưu đãi đặc biệt!
-
-#{keyword} #JB88 #2025 #GiaiTri #UuDai #ChatLuongCao""",
-
-            """🔥 **CƠ HỘI VÀNG CHO TIN ĐỒ GIẢI TRÍ 2025**
-
-Đường link chính thức: {source}
-
-Khám phá thế giới giải trí đỉnh cao với đầy đủ tính năng hiện đại và dịch vụ chuyên nghiệp. Chúng tôi cam kết mang đến trải nghiệm tốt nhất cho mọi khách hàng.
-
-🎁 **ƯU ĐÃI ĐẶC BIỆT:**
-⭐ Tặng code trải nghiệm miễn phí
-⭐ Hỗ trợ tận tình 24/7
-⭐ Rút tiền siêu tốc trong 5 phút
-⭐ Bảo mật thông tin tuyệt đối
-⭐ Giao diện tối ưu cho mọi thiết bị
-⭐ Cập nhật tính năng mới liên tục
-⭐ Chăm sóc khách hàng chu đáo
-
-📞 **LIÊN HỆ NGAY:**
-• Hotline: 0027395058
-• Telegram: @catten999  
-• Hỗ trợ: 24/7 bao gồm ngày lễ
-
-🌟 Đăng ký ngay để nhận ưu đãi đặc biệt!
-
-#GameThu #JB88 #UuDai #2025 #LinkChinhThuc #HoTroNhietTinh"""
-        ]
+        self.seo_generator = SEOContentGenerator()
     
     def generate_content(self, keyword, source, prompt=""):
-        """Tạo nội dung đơn giản"""
-        template = random.choice(self.templates)
-        return template.format(keyword=keyword, source=source)
+        """Tạo nội dung đơn giản với SEO tối ưu"""
+        return self.seo_generator.generate_seo_content(keyword, source, prompt)
 
 # ------------------------ Anti-Duplicate System ------------------------
 
@@ -369,6 +402,102 @@ def _uniq_store(page_id: str, text: str):
     bucket.append({"text": text, "timestamp": time.time()})
     corpus[page_id] = bucket[-100:]  # Giữ 100 bài gần nhất
     _uniq_save_corpus(corpus)
+
+# ------------------------ Analytics & Reporting ------------------------
+
+class AnalyticsTracker:
+    """Theo dõi và báo cáo thống kê"""
+    
+    def __init__(self):
+        self.analytics_file = "/tmp/analytics.json"
+    
+    def track_post(self, page_id, post_type, success=True, error_msg=None):
+        """Theo dõi bài đăng"""
+        try:
+            data = self._load_analytics()
+            timestamp = datetime.now().isoformat()
+            
+            event = {
+                "timestamp": timestamp,
+                "page_id": page_id,
+                "post_type": post_type,
+                "success": success,
+                "error": error_msg
+            }
+            
+            data.setdefault("posts", []).append(event)
+            # Giữ 1000 sự kiện gần nhất
+            data["posts"] = data["posts"][-1000:]
+            
+            self._save_analytics(data)
+        except Exception as e:
+            print(f"Analytics tracking error: {e}")
+    
+    def track_message(self, page_id, message_type, success=True):
+        """Theo dõi tin nhắn"""
+        try:
+            data = self._load_analytics()
+            timestamp = datetime.now().isoformat()
+            
+            event = {
+                "timestamp": timestamp,
+                "page_id": page_id,
+                "message_type": message_type,
+                "success": success
+            }
+            
+            data.setdefault("messages", []).append(event)
+            data["messages"] = data["messages"][-1000:]
+            
+            self._save_analytics(data)
+        except Exception as e:
+            print(f"Analytics tracking error: {e}")
+    
+    def get_daily_stats(self):
+        """Lấy thống kê hàng ngày"""
+        try:
+            data = self._load_analytics()
+            today = datetime.now().date().isoformat()
+            
+            today_posts = [p for p in data.get("posts", []) 
+                          if p["timestamp"].startswith(today)]
+            today_messages = [m for m in data.get("messages", []) 
+                            if m["timestamp"].startswith(today)]
+            
+            successful_posts = len([p for p in today_posts if p["success"]])
+            successful_messages = len([m for m in today_messages if m["success"]])
+            
+            return {
+                "date": today,
+                "total_posts": len(today_posts),
+                "successful_posts": successful_posts,
+                "failed_posts": len(today_posts) - successful_posts,
+                "total_messages": len(today_messages),
+                "successful_messages": successful_messages
+            }
+        except Exception as e:
+            print(f"Analytics stats error: {e}")
+            return {}
+    
+    def _load_analytics(self):
+        """Tải dữ liệu analytics"""
+        try:
+            with open(self.analytics_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {"posts": [], "messages": []}
+    
+    def _save_analytics(self, data):
+        """Lưu dữ liệu analytics"""
+        try:
+            os.makedirs(os.path.dirname(self.analytics_file), exist_ok=True)
+            with open(self.analytics_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error saving analytics: {e}")
+
+# Khởi tạo analytics tracker
+analytics_tracker = AnalyticsTracker()
 
 # ------------------------ Frontend HTML ------------------------
 
@@ -430,15 +559,22 @@ INDEX_HTML = r"""<!doctype html>
     .tab{display:none}
     .tab.active{display:block}
     .message-image{max-width:200px;border-radius:8px;margin-top:8px}
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin:16px 0}
+    .stat-card{background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:16px;text-align:center}
+    .stat-number{font-size:24px;font-weight:bold;color:#111}
+    .stat-label{font-size:12px;color:#666;margin-top:4px}
+    .progress-bar{height:8px;background:#e9ecef;border-radius:4px;overflow:hidden;margin:8px 0}
+    .progress-fill{height:100%;background:#28a745;transition:width 0.3s}
     @media (max-width: 768px) {
       .grid{grid-template-columns:1fr}
       .container{padding:0 12px}
+      .stats-grid{grid-template-columns:1fr 1fr}
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>🚀 AKUTA Content Manager 2025</h1>
+    <h1>🚀 AKUTA Content Manager 2025 - SEO OPTIMIZED</h1>
 
     <div class="system-alert warning" id="systemAlert">
       <strong>Hệ thống đang chạy:</strong> <span id="systemStatus">Đang kiểm tra...</span>
@@ -449,6 +585,7 @@ INDEX_HTML = r"""<!doctype html>
       <button class="tab-btn" data-tab="posting">📢 Đăng bài</button>
       <button class="tab-btn" data-tab="settings">⚙️ Cài đặt</button>
       <button class="tab-btn" data-tab="analytics">📊 Thống kê</button>
+      <button class="tab-btn" data-tab="seo">🔍 SEO Tools</button>
     </div>
 
     <!-- Tab Tin nhắn -->
@@ -518,18 +655,23 @@ INDEX_HTML = r"""<!doctype html>
       </div>
 
       <div class="card">
-        <h3>🤖 AI Content Generator</h3>
+        <h3>🤖 AI Content Generator (SEO OPTIMIZED)</h3>
+        <div class="muted">
+          🔍 Tự động tạo content chuẩn SEO với 6 hashtag cố định + 10-15 hashtag liên quan
+        </div>
         <div class="row">
-          <textarea id="ai_prompt" placeholder="Nhập prompt để AI viết bài (tuỳ chọn)..."></textarea>
+          <textarea id="ai_prompt" placeholder="Nhập prompt tuỳ chỉnh (tuỳ chọn)..."></textarea>
         </div>
         <div class="row">
           <button class="btn" id="btn_ai_generate">🎨 Tạo nội dung bằng AI</button>
           <button class="btn" id="btn_ai_enhance">✨ Làm đẹp nội dung</button>
+          <button class="btn" id="btn_check_seo">🔍 Kiểm tra SEO</button>
         </div>
       </div>
 
       <div class="card">
         <h3>📝 Nội dung bài đăng</h3>
+        <div class="muted" id="seo_score">Điểm SEO: Chưa kiểm tra</div>
         <div class="row">
           <textarea id="post_text" placeholder="Nội dung bài đăng sẽ hiển thị ở đây..." style="min-height:200px"></textarea>
         </div>
@@ -542,6 +684,11 @@ INDEX_HTML = r"""<!doctype html>
             <input type="radio" name="post_type" value="reels"> 
             Đăng Reels (video)
           </label>
+          <label class="checkbox">
+            <input type="checkbox" id="enable_scheduling"> 
+            Lên lịch đăng
+          </label>
+          <input type="datetime-local" id="schedule_time" style="display:none">
         </div>
         <div class="row">
           <input type="text" id="post_media_url" placeholder="🔗 URL ảnh/video (tuỳ chọn)" style="flex:1">
@@ -581,6 +728,7 @@ INDEX_HTML = r"""<!doctype html>
           <button class="btn" id="btn_test_tokens">🧪 Test Tokens</button>
           <button class="btn" id="btn_refresh_pages">🔄 Làm mới Pages</button>
           <button class="btn" id="btn_health_check">❤️ Health Check</button>
+          <button class="btn" id="btn_clear_analytics">📊 Xoá thống kê</button>
         </div>
         <div class="status" id="admin_status"></div>
       </div>
@@ -590,10 +738,29 @@ INDEX_HTML = r"""<!doctype html>
     <div id="tab-analytics" class="tab">
       <div class="card">
         <h3>📊 Thống kê hoạt động</h3>
+        <div class="stats-grid" id="daily_stats">
+          <div class="stat-card">
+            <div class="stat-number" id="stat_posts_today">0</div>
+            <div class="stat-label">Bài đăng hôm nay</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="stat_success_posts">0</div>
+            <div class="stat-label">Bài đăng thành công</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="stat_failed_posts">0</div>
+            <div class="stat-label">Bài đăng thất bại</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="stat_messages_today">0</div>
+            <div class="stat-label">Tin nhắn hôm nay</div>
+          </div>
+        </div>
+        
         <div class="row">
           <div class="col" style="flex:1">
             <div class="card" style="background:#f8f9fa">
-              <h4>📈 Tổng quan</h4>
+              <h4>📈 Tổng quan hệ thống</h4>
               <div id="analytics_overview">Đang tải...</div>
             </div>
           </div>
@@ -602,6 +769,52 @@ INDEX_HTML = r"""<!doctype html>
               <h4>🔔 Hoạt động gần đây</h4>
               <div id="recent_activity">Đang tải...</div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab SEO Tools -->
+    <div id="tab-seo" class="tab">
+      <div class="card">
+        <h3>🔍 Công cụ SEO & Content</h3>
+        <div class="row">
+          <div class="col" style="flex:1">
+            <div class="card">
+              <h4>🎯 SEO Content Analyzer</h4>
+              <textarea id="seo_content" placeholder="Dán nội dung cần phân tích SEO..." style="min-height:150px"></textarea>
+              <div class="row">
+                <button class="btn primary" id="btn_analyze_seo">Phân tích SEO</button>
+                <button class="btn" id="btn_optimize_content">Tối ưu hoá</button>
+              </div>
+              <div id="seo_analysis_result"></div>
+            </div>
+          </div>
+          <div class="col" style="flex:1">
+            <div class="card">
+              <h4>🏷️ Hashtag Generator</h4>
+              <input type="text" id="hashtag_keyword" placeholder="Nhập từ khoá chính..." style="margin-bottom:12px">
+              <div class="row">
+                <button class="btn primary" id="btn_generate_hashtags">Tạo hashtag</button>
+                <button class="btn" id="btn_copy_hashtags">📋 Copy</button>
+              </div>
+              <div id="hashtag_result" style="margin-top:12px;padding:12px;background:#f8f9fa;border-radius:8px;min-height:100px"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card">
+          <h4>📋 SEO Guidelines</h4>
+          <div style="background:#f8f9fa;padding:16px;border-radius:8px">
+            <strong>Quy tắc SEO bắt buộc:</strong>
+            <ul style="margin:8px 0;padding-left:20px">
+              <li>6 hashtag cố định cho mỗi từ khoá</li>
+              <li>10-15 hashtag bổ sung liên quan</li>
+              <li>Độ dài 180-280 từ</li>
+              <li>Từ khoá xuất hiện tự nhiên trong content</li>
+              <li>Tránh từ ngữ nhạy cảm, vi phạm chính sách</li>
+              <li>Cấu trúc rõ ràng: Tiêu đề → Nội dung → Hashtag</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -644,6 +857,9 @@ INDEX_HTML = r"""<!doctype html>
         loadSettings();
       } else if (tabName === 'analytics') {
         loadAnalytics();
+        loadDailyStats();
+      } else if (tabName === 'seo') {
+        // Initialize SEO tools
       }
     });
   });
@@ -860,7 +1076,7 @@ INDEX_HTML = r"""<!doctype html>
     container.scrollTop = container.scrollHeight;
   }
 
-  // AI Content Generation
+  // AI Content Generation với SEO
   async function generateAIContent() {
     const pids = $all('#post_pages_box .pg-checkbox:checked').map(cb => cb.value);
     const prompt = $('#ai_prompt').value.trim();
@@ -872,7 +1088,7 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     const pageId = pids[0];
-    status.textContent = '🤖 AI đang tạo nội dung...';
+    status.textContent = '🤖 AI đang tạo nội dung chuẩn SEO...';
 
     try {
       const response = await fetch('/api/ai/generate', {
@@ -889,10 +1105,45 @@ INDEX_HTML = r"""<!doctype html>
       }
 
       $('#post_text').value = data.text || '';
-      status.textContent = '✅ Đã tạo nội dung thành công!';
+      status.textContent = '✅ Đã tạo nội dung chuẩn SEO thành công!';
+      
+      // Tự động kiểm tra SEO
+      checkSEOScore(data.text);
       
     } catch (error) {
       status.textContent = `Lỗi: ${error.message}`;
+    }
+  }
+
+  // Kiểm tra điểm SEO
+  async function checkSEOScore(content) {
+    try {
+      const response = await fetch('/api/seo/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        $('#seo_score').textContent = 'Điểm SEO: Lỗi phân tích';
+        return;
+      }
+
+      const score = data.score || 0;
+      const color = score >= 80 ? '#28a745' : score >= 60 ? '#ffc107' : '#dc3545';
+      
+      $('#seo_score').innerHTML = `
+        Điểm SEO: <strong style="color:${color}">${score}/100</strong>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${score}%"></div>
+        </div>
+        ${data.recommendations ? `<small>${data.recommendations}</small>` : ''}
+      `;
+      
+    } catch (error) {
+      $('#seo_score').textContent = 'Điểm SEO: Lỗi kiểm tra';
     }
   }
 
@@ -948,6 +1199,9 @@ INDEX_HTML = r"""<!doctype html>
         </div>
       `;
       
+      // Cập nhật thống kê
+      loadDailyStats();
+      
     } catch (error) {
       status.textContent = `Lỗi: ${error.message}`;
     }
@@ -971,7 +1225,7 @@ INDEX_HTML = r"""<!doctype html>
           <div class="settings-row">
             <div class="settings-name">${page.name}</div>
             <input type="text" class="settings-input" id="keyword_${page.id}" 
-                   value="${page.keyword || ''}" placeholder="Keyword">
+                   value="${page.keyword || ''}" placeholder="Keyword (VD: MB66)">
             <input type="text" class="settings-input" id="source_${page.id}" 
                    value="${page.source || ''}" placeholder="Source URL">
           </div>
@@ -1068,6 +1322,120 @@ INDEX_HTML = r"""<!doctype html>
     }
   }
 
+  // Daily stats
+  async function loadDailyStats() {
+    try {
+      const response = await fetch('/api/analytics/daily');
+      const data = await response.json();
+      
+      if (data.error) {
+        console.error('Lỗi tải thống kê ngày:', data.error);
+        return;
+      }
+
+      $('#stat_posts_today').textContent = data.total_posts || 0;
+      $('#stat_success_posts').textContent = data.successful_posts || 0;
+      $('#stat_failed_posts').textContent = data.failed_posts || 0;
+      $('#stat_messages_today').textContent = data.total_messages || 0;
+      
+    } catch (error) {
+      console.error('Lỗi tải thống kê:', error);
+    }
+  }
+
+  // SEO Tools functionality
+  async function analyzeSEO() {
+    const content = $('#seo_content').value.trim();
+    
+    if (!content) {
+      $('#seo_analysis_result').innerHTML = '<div class="status warning">Vui lòng nhập nội dung để phân tích</div>';
+      return;
+    }
+
+    $('#seo_analysis_result').innerHTML = '<div class="muted">Đang phân tích SEO...</div>';
+
+    try {
+      const response = await fetch('/api/seo/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        $('#seo_analysis_result').innerHTML = `<div class="status error">Lỗi: ${data.error}</div>`;
+        return;
+      }
+
+      let resultHtml = `
+        <div class="status success">
+          <strong>Điểm SEO: ${data.score}/100</strong>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:${data.score}%"></div>
+          </div>
+        </div>
+      `;
+
+      if (data.analysis) {
+        resultHtml += '<div style="margin-top:12px"><strong>Phân tích chi tiết:</strong><ul style="margin:8px 0;padding-left:20px">';
+        data.analysis.forEach(item => {
+          const icon = item.passed ? '✅' : '❌';
+          resultHtml += `<li>${icon} ${item.check}: ${item.message}</li>`;
+        });
+        resultHtml += '</ul></div>';
+      }
+
+      if (data.recommendations) {
+        resultHtml += `<div><strong>Đề xuất cải thiện:</strong><br>${data.recommendations}</div>`;
+      }
+
+      $('#seo_analysis_result').innerHTML = resultHtml;
+      
+    } catch (error) {
+      $('#seo_analysis_result').innerHTML = `<div class="status error">Lỗi phân tích: ${error.message}</div>`;
+    }
+  }
+
+  async function generateHashtags() {
+    const keyword = $('#hashtag_keyword').value.trim();
+    
+    if (!keyword) {
+      $('#hashtag_result').innerHTML = '<div class="status warning">Vui lòng nhập từ khoá</div>';
+      return;
+    }
+
+    $('#hashtag_result').innerHTML = '<div class="muted">Đang tạo hashtag...</div>';
+
+    try {
+      const response = await fetch('/api/seo/hashtags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword })
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        $('#hashtag_result').innerHTML = `<div class="status error">Lỗi: ${data.error}</div>`;
+        return;
+      }
+
+      let resultHtml = `
+        <div><strong>Hashtag cho "${keyword}":</strong></div>
+        <div style="margin:8px 0;padding:8px;background:#fff;border-radius:4px;border:1px solid #ddd">
+          ${data.hashtags || 'Không có hashtag'}
+        </div>
+        <div class="muted">Tổng: ${data.count || 0} hashtag</div>
+      `;
+
+      $('#hashtag_result').innerHTML = resultHtml;
+      
+    } catch (error) {
+      $('#hashtag_result').innerHTML = `<div class="status error">Lỗi tạo hashtag: ${error.message}</div>`;
+    }
+  }
+
   // Event listeners
   document.addEventListener('DOMContentLoaded', function() {
     // Load initial data
@@ -1119,9 +1487,29 @@ INDEX_HTML = r"""<!doctype html>
           mediaUrl = uploadData.url;
         }
 
-        // Implementation for sending message would go here
-        // This is a placeholder - you would need to implement the actual message sending
-        $('#thread_status').textContent = 'Tính năng gửi tin nhắn đang được phát triển...';
+        // Send message
+        const response = await fetch('/api/inbox/reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversation_id: window.currentConversation?.id,
+            page_id: window.currentConversation?.page_id,
+            message: text,
+            media_url: mediaUrl
+          })
+        });
+
+        const data = await response.json();
+        
+        if (data.error) {
+          $('#thread_status').textContent = `Lỗi gửi tin nhắn: ${data.error}`;
+        } else {
+          $('#thread_status').textContent = '✅ Đã gửi tin nhắn thành công!';
+          $('#reply_text').value = '';
+          $('#reply_image').value = '';
+          // Reload messages
+          loadConversationMessages(window.currentConversationIndex);
+        }
         
       } catch (error) {
         $('#thread_status').textContent = `Lỗi: ${error.message}`;
@@ -1131,6 +1519,14 @@ INDEX_HTML = r"""<!doctype html>
     // Posting events
     $('#btn_ai_generate')?.addEventListener('click', generateAIContent);
     $('#btn_post_submit')?.addEventListener('click', postToPages);
+    $('#btn_check_seo')?.addEventListener('click', () => {
+      const content = $('#post_text').value.trim();
+      if (content) {
+        checkSEOScore(content);
+      } else {
+        $('#seo_score').textContent = 'Vui lòng nhập nội dung để kiểm tra SEO';
+      }
+    });
 
     // Settings events
     $('#btn_settings_save')?.addEventListener('click', saveSettings);
@@ -1146,6 +1542,39 @@ INDEX_HTML = r"""<!doctype html>
       $('#admin_status').textContent = '✅ Đã kiểm tra tình trạng hệ thống';
     });
 
+    $('#btn_clear_analytics')?.addEventListener('click', async () => {
+      try {
+        const response = await fetch('/api/analytics/clear', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.error) {
+          $('#admin_status').textContent = `Lỗi: ${data.error}`;
+        } else {
+          $('#admin_status').textContent = '✅ Đã xoá dữ liệu thống kê';
+          loadDailyStats();
+        }
+      } catch (error) {
+        $('#admin_status').textContent = `Lỗi: ${error.message}`;
+      }
+    });
+
+    // SEO Tools events
+    $('#btn_analyze_seo')?.addEventListener('click', analyzeSEO);
+    $('#btn_generate_hashtags')?.addEventListener('click', generateHashtags);
+    $('#btn_copy_hashtags')?.addEventListener('click', () => {
+      const hashtagText = $('#hashtag_result').textContent;
+      if (hashtagText && !hashtagText.includes('Lỗi') && !hashtagText.includes('Vui lòng')) {
+        navigator.clipboard.writeText(hashtagText).then(() => {
+          alert('✅ Đã copy hashtag vào clipboard!');
+        });
+      }
+    });
+
+    // Schedule toggle
+    $('#enable_scheduling')?.addEventListener('change', function() {
+      $('#schedule_time').style.display = this.checked ? 'block' : 'none';
+    });
+
     // Auto-refresh conversations every 30 seconds
     setInterval(() => {
       if ($('#tab-inbox').classList.contains('active')) {
@@ -1155,6 +1584,9 @@ INDEX_HTML = r"""<!doctype html>
 
     // Update system status every minute
     setInterval(updateSystemStatus, 60000);
+
+    // Update daily stats every 2 minutes
+    setInterval(loadDailyStats, 120000);
   });
 
   // Handle file upload for posts
@@ -1372,9 +1804,57 @@ def api_inbox_messages():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/inbox/reply", methods=["POST"])
+def api_inbox_reply():
+    """API gửi tin nhắn trả lời - CHỨC NĂNG MỚI"""
+    try:
+        data = request.get_json()
+        conversation_id = data.get("conversation_id")
+        page_id = data.get("page_id")
+        message = data.get("message", "").strip()
+        media_url = data.get("media_url")
+        
+        if not conversation_id or not page_id:
+            return jsonify({"error": "Thiếu conversation_id hoặc page_id"}), 400
+            
+        if not message and not media_url:
+            return jsonify({"error": "Thiếu nội dung tin nhắn hoặc media"}), 400
+            
+        token = PAGE_TOKENS.get(page_id)
+        if not token:
+            return jsonify({"error": "Token không tồn tại"}), 400
+            
+        # Gửi tin nhắn
+        payload = {
+            "access_token": token,
+            "message": message
+        }
+        
+        if media_url:
+            payload["attachment_url"] = media_url
+            
+        result = fb_post(f"{conversation_id}/messages", payload)
+        
+        # Theo dõi analytics
+        analytics_tracker.track_message(page_id, "reply", success=True)
+        
+        return jsonify({
+            "success": True,
+            "message_id": result.get("id"),
+            "result": result
+        })
+        
+    except Exception as e:
+        # Theo dõi lỗi analytics
+        page_id = request.get_json().get("page_id") if request.is_json else None
+        if page_id:
+            analytics_tracker.track_message(page_id, "reply", success=False)
+            
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
-    """API tạo nội dung bằng AI"""
+    """API tạo nội dung bằng AI với SEO tối ưu"""
     try:
         data = request.get_json()
         page_id = data.get("page_id")
@@ -1385,7 +1865,7 @@ def api_ai_generate():
             
         settings = _load_settings()
         page_settings = settings.get(page_id, {})
-        keyword = page_settings.get("keyword", "JB88")
+        keyword = page_settings.get("keyword", "MB66")  # Default keyword
         source = page_settings.get("source", "https://example.com")
         
         # Sử dụng AI nếu có
@@ -1405,20 +1885,31 @@ def api_ai_generate():
                 
                 return jsonify({
                     "text": content,
-                    "type": "ai_generated"
+                    "type": "ai_generated",
+                    "keyword": keyword
                 })
                 
             except Exception as e:
                 print(f"AI generation failed: {e}")
                 # Fallback to simple generator
                 
-        # Sử dụng generator đơn giản
+        # Sử dụng generator đơn giản với SEO
         generator = SimpleContentGenerator()
         content = generator.generate_content(keyword, source, user_prompt)
         
+        # Kiểm tra anti-duplicate
+        corpus = _uniq_load_corpus()
+        history = corpus.get(page_id, [])
+        
+        if ANTI_DUP_ENABLED and _uniq_too_similar(content, history):
+            return jsonify({"error": "Nội dung quá giống với bài trước"}), 409
+            
+        _uniq_store(page_id, content)
+        
         return jsonify({
             "text": content,
-            "type": "simple_generated"
+            "type": "simple_generated",
+            "keyword": keyword
         })
         
     except Exception as e:
@@ -1426,7 +1917,7 @@ def api_ai_generate():
 
 @app.route("/api/pages/post", methods=["POST"])
 def api_pages_post():
-    """API đăng bài lên pages"""
+    """API đăng bài lên pages với tracking"""
     try:
         data = request.get_json()
         pages = data.get("pages", [])
@@ -1450,6 +1941,7 @@ def api_pages_post():
                     "error": "Token không hợp lệ",
                     "link": None
                 })
+                analytics_tracker.track_post(pid, post_type, success=False, error_msg="Token không hợp lệ")
                 continue
                 
             try:
@@ -1486,13 +1978,20 @@ def api_pages_post():
                     "status": "success"
                 })
                 
+                # Theo dõi thành công
+                analytics_tracker.track_post(pid, post_type, success=True)
+                
             except Exception as e:
+                error_msg = str(e)
                 results.append({
                     "page_id": pid,
-                    "error": str(e),
+                    "error": error_msg,
                     "link": None,
                     "status": "error"
                 })
+                
+                # Theo dõi lỗi
+                analytics_tracker.track_post(pid, post_type, success=False, error_msg=error_msg)
                 
         return jsonify({"results": results})
         
@@ -1542,14 +2041,14 @@ def health_check():
         "pages_connected": valid_tokens,
         "valid_tokens": valid_tokens,
         "openai_ready": _client is not None,
-        "version": "AKUTA-2025-FULL"
+        "version": "AKUTA-2025-SEO-OPTIMIZED"
     })
 
 # ------------------------ Settings Management ------------------------
 
 @app.route("/api/settings/get")
 def api_settings_get():
-    """API lấy cài đặt - ĐÃ SỬA"""
+    """API lấy cài đặt"""
     try:
         settings = _load_settings()
         pages = []
@@ -1570,7 +2069,7 @@ def api_settings_get():
 
 @app.route("/api/settings/save", methods=["POST"])
 def api_settings_save():
-    """API lưu cài đặt - ĐÃ SỬA"""
+    """API lưu cài đặt"""
     try:
         data = request.get_json()
         items = data.get("items", [])
@@ -1596,7 +2095,7 @@ def api_settings_save():
 
 @app.route("/api/analytics/overview")
 def api_analytics_overview():
-    """API thống kê tổng quan - ĐÃ SỬA"""
+    """API thống kê tổng quan"""
     try:
         valid_tokens = sum(1 for t in PAGE_TOKENS.values() if t and t.startswith("EAA"))
         
@@ -1620,6 +2119,135 @@ def api_analytics_overview():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/analytics/daily")
+def api_analytics_daily():
+    """API thống kê hàng ngày"""
+    try:
+        daily_stats = analytics_tracker.get_daily_stats()
+        return jsonify(daily_stats)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/analytics/clear", methods=["POST"])
+def api_analytics_clear():
+    """API xoá dữ liệu thống kê"""
+    try:
+        # Đơn giản là tạo file analytics mới
+        with open("/tmp/analytics.json", "w") as f:
+            json.dump({"posts": [], "messages": []}, f)
+        return jsonify({"ok": True, "message": "Đã xoá dữ liệu thống kê"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ------------------------ SEO Tools APIs ------------------------
+
+@app.route("/api/seo/analyze", methods=["POST"])
+def api_seo_analyze():
+    """API phân tích SEO content"""
+    try:
+        data = request.get_json()
+        content = data.get("content", "")
+        
+        if not content:
+            return jsonify({"error": "Thiếu nội dung"}), 400
+        
+        # Phân tích cơ bản
+        analysis = []
+        score = 0
+        
+        # Kiểm tra độ dài
+        word_count = len(content.split())
+        if 180 <= word_count <= 280:
+            analysis.append({"check": "Độ dài content", "message": f"Tối ưu ({word_count} từ)", "passed": True})
+            score += 20
+        else:
+            analysis.append({"check": "Độ dài content", "message": f"Chưa tối ưu ({word_count} từ)", "passed": False})
+        
+        # Kiểm tra hashtag
+        hashtag_count = content.count('#')
+        if hashtag_count >= 15:
+            analysis.append({"check": "Số lượng hashtag", "message": f"Tốt ({hashtag_count} hashtag)", "passed": True})
+            score += 20
+        elif hashtag_count >= 10:
+            analysis.append({"check": "Số lượng hashtag", "message": f"Khá ({hashtag_count} hashtag)", "passed": True})
+            score += 15
+        else:
+            analysis.append({"check": "Số lượng hashtag", "message": f"Thiếu ({hashtag_count} hashtag)", "passed": False})
+        
+        # Kiểm tra từ khoá
+        settings = _load_settings()
+        has_keyword = any(settings.get(pid, {}).get("keyword", "") in content for pid in PAGE_TOKENS.keys())
+        if has_keyword:
+            analysis.append({"check": "Từ khoá chính", "message": "Có xuất hiện trong content", "passed": True})
+            score += 20
+        else:
+            analysis.append({"check": "Từ khoá chính", "message": "Không xuất hiện trong content", "passed": False})
+        
+        # Kiểm tra cấu trúc
+        has_emoji = any(char in content for char in ["🚀", "🎯", "✨", "✅", "📞", "💫"])
+        has_structure = any(marker in content for marker in ["**", "•", "- ", ":"])
+        
+        if has_emoji and has_structure:
+            analysis.append({"check": "Cấu trúc & Format", "message": "Tốt, có emoji và định dạng rõ ràng", "passed": True})
+            score += 20
+        elif has_structure:
+            analysis.append({"check": "Cấu trúc & Format", "message": "Khá, có định dạng nhưng thiếu emoji", "passed": True})
+            score += 15
+        else:
+            analysis.append({"check": "Cấu trúc & Format", "message": "Cần cải thiện định dạng", "passed": False})
+        
+        # Kiểm tra từ nhạy cảm
+        sensitive_words = ["cờ bạc", "đánh bạc", "cá độ", "lừa đảo", "scam"]
+        has_sensitive = any(word in content.lower() for word in sensitive_words)
+        if not has_sensitive:
+            analysis.append({"check": "Từ nhạy cảm", "message": "An toàn, không có từ nhạy cảm", "passed": True})
+            score += 20
+        else:
+            analysis.append({"check": "Từ nhạy cảm", "message": "CÓ TỪ NHẠY CẢM - CẦN SỬA NGAY", "passed": False})
+            score = 0  # Zero điểm nếu có từ nhạy cảm
+        
+        # Đề xuất
+        recommendations = []
+        if word_count < 180:
+            recommendations.append("• Tăng độ dài content lên 180-280 từ")
+        if hashtag_count < 15:
+            recommendations.append("• Thêm hashtag để đạt 15-20 hashtag")
+        if not has_emoji:
+            recommendations.append("• Thêm emoji để tăng độ thu hút")
+        if has_sensitive:
+            recommendations.append("• LOẠI BỎ NGAY các từ nhạy cảm để tránh vi phạm")
+        
+        return jsonify({
+            "score": score,
+            "analysis": analysis,
+            "recommendations": " | ".join(recommendations) if recommendations else "Content đã tối ưu tốt!"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/seo/hashtags", methods=["POST"])
+def api_seo_hashtags():
+    """API tạo hashtag SEO"""
+    try:
+        data = request.get_json()
+        keyword = data.get("keyword", "").strip()
+        
+        if not keyword:
+            return jsonify({"error": "Thiếu từ khoá"}), 400
+        
+        seo_generator = SEOContentGenerator()
+        hashtags = seo_generator._generate_hashtags(keyword)
+        
+        return jsonify({
+            "keyword": keyword,
+            "hashtags": hashtags,
+            "count": len(hashtags.split())
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ------------------------ Error Handlers ------------------------
 
 @app.errorhandler(404)
@@ -1637,22 +2265,28 @@ def handle_exception(e):
 # ------------------------ Main ------------------------
 
 if __name__ == "__main__":
-    from datetime import timedelta
-    
     port = int(os.getenv("PORT", "5000"))
     
     print("=" * 60)
-    print("🚀 AKUTA Content Manager 2025 - FULL FEATURES")
+    print("🚀 AKUTA Content Manager 2025 - SEO OPTIMIZED")
     print("=" * 60)
     print(f"📍 Port: {port}")
     print(f"📊 Total pages: {len(PAGE_TOKENS)}")
     print(f"✅ Valid tokens: {sum(1 for t in PAGE_TOKENS.values() if t and t.startswith('EAA'))}")
     print(f"🤖 OpenAI: {'READY' if _client else 'DISABLED'}")
+    print(f"🔍 SEO Tools: ENABLED")
+    print(f"📈 Analytics: ENABLED")
     print("=" * 60)
-    print("🔍 Debug URLs:")
-    print(f"   • Health check: http://0.0.0.0:{port}/health")
-    print(f"   • Pages API: http://0.0.0.0:{port}/api/pages") 
-    print(f"   • Settings: http://0.0.0.0:{port}/api/settings/get")
+    print("🎯 SEO Features:")
+    print("   • 6 hashtag cố định cho mỗi từ khoá")
+    print("   • 10-15 hashtag bổ sung liên quan") 
+    print("   • Content chuẩn SEO, không vi phạm")
+    print("   • Tự động kiểm tra điểm SEO")
+    print("   • Hashtag generator thông minh")
+    print("=" * 60)
+    print("🔗 URLs:")
+    print(f"   • Main: http://0.0.0.0:{port}")
+    print(f"   • Health: http://0.0.0.0:{port}/health")
     print(f"   • Analytics: http://0.0.0.0:{port}/api/analytics/overview")
     print("=" * 60)
     
