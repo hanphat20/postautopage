@@ -970,47 +970,38 @@ INDEX_HTML = r"""<!doctype html>
     const container = $('#conversations');
     
     if (!conversations.length) {
-      container.innerHTML = '<div class="muted">Không có hội thoại nào.</div>';
-      return;
+        container.innerHTML = '<div class="muted">Không có hội thoại nào.</div>';
+        return;
     }
 
     const html = conversations.map((conv, index) => {
-      const time = conv.updated_time ? new Date(conv.updated_time).toLocaleString('vi-VN') : 'N/A';
-      const unreadCount = conv.unread_count || 0;
-      const unreadBadge = unreadCount > 0 ? 
-        `<span class="badge unread">${unreadCount} chưa đọc</span>` : 
-        '<span class="badge">Đã đọc</span>';
-      
-      // Hiển thị tên người gửi
-      let sendersText = 'Không có người gửi';
-      if (conv.senders && conv.senders.data && conv.senders.data.length > 0) {
-        const senderNames = conv.senders.data.map(sender => sender.name || 'Unknown').join(', ');
-        sendersText = senderNames;
-      } else if (conv.senders && Array.isArray(conv.senders)) {
-        sendersText = conv.senders.join(', ');
-      } else if (typeof conv.senders === 'string') {
-        sendersText = conv.senders;
-      }
-      
-      return `
-        <div class="conv-item" data-index="${index}">
-          <div style="flex:1">
-            <div><strong>${sendersText}</strong></div>
-            <div class="conv-meta">${conv.snippet || 'No message'}</div>
-            <div class="conv-meta">${conv.page_name || ''}</div>
-          </div>
-          <div class="right">
-            <div class="conv-meta">${time}</div>
-            ${unreadBadge}
-          </div>
-        </div>
-      `;
+        const time = conv.updated_time ? new Date(conv.updated_time).toLocaleString('vi-VN') : 'N/A';
+        const unreadCount = conv.unread_count || 0;
+        const unreadBadge = unreadCount > 0 ? 
+            `<span class="badge unread">${unreadCount} chưa đọc</span>` : 
+            '<span class="badge">Đã đọc</span>';
+        
+        // SỬA: Hiển thị tên người gửi đúng cách
+        const sendersText = conv.senders_text || conv.senders_list?.join(', ') || 'Không có thông tin';
+        
+        return `
+            <div class="conv-item" data-index="${index}">
+                <div style="flex:1">
+                    <div><strong>${sendersText}</strong></div>
+                    <div class="conv-meta">${conv.snippet || 'No message'}</div>
+                    <div class="conv-meta">${conv.page_name || ''}</div>
+                </div>
+                <div class="right">
+                    <div class="conv-meta">${time}</div>
+                    ${unreadBadge}
+                </div>
+            </div>
+        `;
     }).join('');
     
     container.innerHTML = html;
     window.conversationsData = conversations;
-  }
-
+}
   // Load conversation messages
   async function loadConversationMessages(convIndex) {
     const conv = window.conversationsData[convIndex];
@@ -1049,35 +1040,37 @@ INDEX_HTML = r"""<!doctype html>
     const container = $('#thread_messages');
     
     const html = messages.map(msg => {
-      const time = msg.created_time ? new Date(msg.created_time).toLocaleString('vi-VN') : '';
-      const isPage = msg.is_page;
-      
-      let messageContent = msg.message || '(Không có nội dung văn bản)';
-      
-      // Hiển thị ảnh nếu có
-      if (msg.attachments && msg.attachments.data && msg.attachments.data.length > 0) {
-        msg.attachments.data.forEach(attachment => {
-          if (attachment.type === 'image' && attachment.image_data) {
-            messageContent += `<br><img src="${attachment.image_data.url}" class="message-image" alt="Hình ảnh">`;
-          } else if (attachment.type === 'image' && attachment.url) {
-            messageContent += `<br><img src="${attachment.url}" class="message-image" alt="Hình ảnh">`;
-          }
-        });
-      }
-      
-      return `
-        <div style="display: flex; justify-content: ${isPage ? 'flex-end' : 'flex-start'}; margin: 8px 0;">
-          <div class="bubble ${isPage ? 'right' : ''}">
-            <div class="meta">${msg.from?.name || 'Unknown'} • ${time}</div>
-            <div>${messageContent}</div>
-          </div>
-        </div>
-      `;
+        const time = msg.created_time ? new Date(msg.created_time).toLocaleString('vi-VN') : '';
+        const isPage = msg.is_page;
+        
+        // SỬA: Sử dụng from_name thay vì from.name
+        const fromName = msg.from_name || msg.from?.name || 'Unknown';
+        let messageContent = msg.message || '(Không có nội dung văn bản)';
+        
+        // Hiển thị ảnh nếu có
+        if (msg.attachments && msg.attachments.data && msg.attachments.data.length > 0) {
+            msg.attachments.data.forEach(attachment => {
+                if (attachment.type === 'image' && attachment.image_data) {
+                    messageContent += `<br><img src="${attachment.image_data.url}" class="message-image" alt="Hình ảnh">`;
+                } else if (attachment.type === 'image' && attachment.url) {
+                    messageContent += `<br><img src="${attachment.url}" class="message-image" alt="Hình ảnh">`;
+                }
+            });
+        }
+        
+        return `
+            <div style="display: flex; justify-content: ${isPage ? 'flex-end' : 'flex-start'}; margin: 8px 0;">
+                <div class="bubble ${isPage ? 'right' : ''}">
+                    <div class="meta">${fromName} • ${time}</div>
+                    <div>${messageContent}</div>
+                </div>
+            </div>
+        `;
     }).join('');
     
     container.innerHTML = html;
     container.scrollTop = container.scrollHeight;
-  }
+}
 
   // AI Content Generation với SEO
   async function generateAIContent() {
@@ -1195,12 +1188,19 @@ INDEX_HTML = r"""<!doctype html>
       const success = results.filter(r => !r.error).length;
       const total = results.length;
       
-      status.innerHTML = `
-        <div class="status success">
-          ✅ Đã đăng bài thành công cho ${success}/${total} pages
-          ${success < total ? '<br>⚠️ Một số pages có lỗi, kiểm tra token' : ''}
+      s// Trong hàm postToPages, sửa phần xử lý kết quả:
+status.innerHTML = `
+    <div class="status success">
+        ✅ Đã đăng bài thành công cho ${success}/${total} pages
+        ${success < total ? '<br>⚠️ Một số pages có lỗi, kiểm tra token' : ''}
+    </div>
+    ${results.map(result => `
+        <div style="margin-top: 8px; font-size: 12px;">
+            <strong>${result.page_id}:</strong> 
+            ${result.link ? `<a href="${result.link}" target="_blank">✅ Xem bài đăng</a>` : '❌ ' + (result.error || 'Lỗi không xác định')}
         </div>
-      `;
+    `).join('')}
+`;
       
       // Cập nhật thống kê
       loadDailyStats();
@@ -1752,7 +1752,15 @@ def api_inbox_conversations():
                 })
                 
                 for conv in data.get("data", []):
+                    # FIX: Xử lý senders đúng cách
+                    senders_info = []
+                    if conv.get("senders") and conv["senders"].get("data"):
+                        senders_info = [sender["name"] for sender in conv["senders"]["data"]]
+                    
                     conv["page_id"] = pid
+                    conv["senders_list"] = senders_info
+                    conv["senders_text"] = ", ".join(senders_info) if senders_info else "Không có thông tin"
+                    
                     # Lấy tên page từ thông tin đã lưu
                     page_name = f"Page {pid}"
                     conv["page_name"] = page_name
@@ -1787,18 +1795,20 @@ def api_inbox_messages():
         # Lấy tin nhắn với thông tin attachments
         data = fb_get(f"{conv_id}/messages", {
             "access_token": token,
-            "fields": "id,message,from,to,created_time,attachments{image_data,url,type}",
+            "fields": "id,message,from{name,id},to,created_time,attachments{image_data,url,type}",
             "limit": 100
         })
         
         messages = data.get("data", [])
         
-        # Đánh dấu tin nhắn từ page
+        # Đánh dấu tin nhắn từ page và xử lý from
         for msg in messages:
             if isinstance(msg.get("from"), dict) and msg["from"].get("id") == page_id:
                 msg["is_page"] = True
+                msg["from_name"] = msg["from"].get("name", "Page")
             else:
                 msg["is_page"] = False
+                msg["from_name"] = msg["from"].get("name", "Unknown") if isinstance(msg.get("from"), dict) else "Unknown"
                 
         messages.sort(key=lambda x: x.get("created_time", ""))
         
@@ -1956,6 +1966,8 @@ def api_pages_post():
                         "description": text_content,
                         "access_token": token
                     })
+                    # Lấy post_id từ video
+                    post_id = out.get("post_id") or out.get("id", "").replace(f"{pid}_", "")
                 elif media_url:
                     # Đăng ảnh
                     out = fb_post(f"{pid}/photos", {
@@ -1963,21 +1975,31 @@ def api_pages_post():
                         "caption": text_content,
                         "access_token": token
                     })
+                    # Lấy post_id từ photo
+                    post_id = out.get("post_id") or out.get("id", "").replace(f"{pid}_", "")
                 else:
                     # Đăng text
                     out = fb_post(f"{pid}/feed", {
                         "message": text_content,
                         "access_token": token
                     })
-                    
-                # Tạo link
-                post_id = out.get("id", "").replace(f"{pid}_", "")
-                link = f"https://facebook.com/{pid}/posts/{post_id}" if post_id else None
+                    post_id = out.get("id", "").replace(f"{pid}_", "")
+                
+                # Tạo link - FIX: Kiểm tra post_id hợp lệ
+                link = None
+                if post_id:
+                    if post_type == "reels":
+                        link = f"https://facebook.com/{pid}/reels/{post_id}"
+                    elif media_url and post_type != "reels":
+                        link = f"https://facebook.com/{pid}/posts/{post_id}"
+                    else:
+                        link = f"https://facebook.com/{pid}/posts/{post_id}"
                 
                 results.append({
                     "page_id": pid,
                     "result": out,
                     "link": link,
+                    "post_id": post_id,
                     "status": "success"
                 })
                 
@@ -2000,7 +2022,6 @@ def api_pages_post():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     """API upload file"""
@@ -2281,6 +2302,38 @@ def internal_error(error):
 @app.errorhandler(Exception)
 def handle_exception(e):
     return jsonify({"error": f"Lỗi hệ thống: {str(e)}"}), 500
+    @app.route("/api/admin/test_tokens", methods=["POST"])
+def api_test_tokens():
+    """API test tokens - CHỨC NĂNG MỚI"""
+    try:
+        results = []
+        for pid, token in PAGE_TOKENS.items():
+            try:
+                # Test token bằng cách lấy thông tin page
+                data = fb_get(pid, {
+                    "access_token": token,
+                    "fields": "name,id"
+                })
+                
+                results.append({
+                    "page_id": pid,
+                    "status": "valid",
+                    "page_name": data.get("name", "Unknown"),
+                    "message": "Token hợp lệ"
+                })
+                
+            except Exception as e:
+                results.append({
+                    "page_id": pid,
+                    "status": "invalid",
+                    "page_name": "Unknown", 
+                    "message": str(e)
+                })
+                
+        return jsonify({"results": results})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ------------------------ Main ------------------------
 
