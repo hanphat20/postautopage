@@ -634,11 +634,18 @@ INDEX_HTML = r"""<!doctype html>
     .prompt-template:hover{background:#e9ecef;border-color:#111}
     .prompt-template.active{background:#111;color:#fff;border-color:#111}
     .prompt-category{margin:16px 0 8px 0;font-weight:600;color:#333;border-bottom:1px solid #eee;padding-bottom:4px}
+    .facebook-links{display:flex;gap:10px;margin:10px 0}
+    .quick-action{background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:10px;margin:8px 0}
+    .quick-action .btn{padding:6px 12px;font-size:12px}
+    .conv-actions{display:flex;gap:5px;margin-top:5px}
+    .conv-actions .btn{padding:2px 8px;font-size:11px}
+    .quick-replies{margin:10px 0;padding:10px;background:#f8f9fa;border-radius:8px}
     @media (max-width: 768px) {
       .grid{grid-template-columns:1fr}
       .container{padding:0 12px}
       .stats-grid{grid-template-columns:1fr 1fr}
       .prompt-templates{grid-template-columns:1fr}
+      .facebook-links{flex-direction:column}
     }
   </style>
 </head>
@@ -693,17 +700,43 @@ INDEX_HTML = r"""<!doctype html>
             <div class="list" id="conversations"></div>
           </div>
 
+          <!-- Card Facebook Links -->
+          <div class="card">
+            <h3>🔗 Mở trên Facebook</h3>
+            <div class="status" id="facebook_links_status">Chọn hội thoại để xem link</div>
+            <div class="row">
+              <button class="btn" id="btn_open_conversation" disabled>💬 Mở hội thoại</button>
+              <button class="btn" id="btn_open_page" disabled>📄 Mở trang</button>
+            </div>
+            <div class="muted">
+              ⚠️ API thường không gửi được tin nhắn. Dùng link này để trả lời thủ công trên Facebook.
+            </div>
+          </div>
+
           <div class="card">
             <div class="toolbar">
               <strong id="thread_header">💬 Chưa chọn hội thoại</strong>
               <span class="status" id="thread_status"></span>
             </div>
             <div id="thread_messages" class="list"></div>
+            
+            <!-- Quick Replies -->
+            <div class="quick-replies" id="quick_replies_container" style="display:none">
+              <strong>💬 Trả lời nhanh:</strong>
+              <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px;">
+                <button class="btn" onclick="setQuickReply('greeting')" style="font-size: 11px; padding: 4px 8px;">Xin chào</button>
+                <button class="btn" onclick="setQuickReply('thanks')" style="font-size: 11px; padding: 4px 8px;">Cảm ơn</button>
+                <button class="btn" onclick="setQuickReply('info')" style="font-size: 11px; padding: 4px 8px;">Thông tin</button>
+                <button class="btn" onclick="setQuickReply('guide')" style="font-size: 11px; padding: 4px 8px;">Hướng dẫn</button>
+                <button class="btn" onclick="setQuickReply('callback')" style="font-size: 11px; padding: 4px 8px;">Gọi lại</button>
+              </div>
+            </div>
+            
             <div class="sendbar">
               <input type="text" id="reply_text" placeholder="Nhập tin nhắn trả lời...">
               <input type="file" id="reply_image" accept="image/*" style="display:none">
               <button class="btn" onclick="document.getElementById('reply_image').click()">📷</button>
-              <button class="btn primary" id="btn_reply">📤 Gửi</button>
+              <button class="btn primary" id="btn_reply">📤 Gửi qua API</button>
             </div>
           </div>
         </div>
@@ -958,6 +991,19 @@ Ví dụ:
   function $(sel) { return document.querySelector(sel); }
   function $all(sel) { return Array.from(document.querySelectorAll(sel)); }
 
+  // Biến toàn cục
+  let currentConversation = null;
+  let currentPage = null;
+  
+  // Quick replies templates
+  const quickReplies = {
+    "greeting": "Xin chào! Cảm ơn bạn đã liên hệ với chúng tôi. Bạn cần hỗ trợ gì ạ?",
+    "thanks": "Cảm ơn bạn đã quan tâm! Chúng tôi rất vui được hỗ trợ bạn.",
+    "info": "Bạn vui lòng để lại số điện thoại hoặc liên hệ hotline 0363269604 để được tư vấn chi tiết nhé!",
+    "guide": "Hướng dẫn chi tiết đã được gửi trong tin nhắn. Bạn cần hỗ trợ thêm gì không?",
+    "callback": "Chúng tôi sẽ liên hệ lại với bạn trong ít phút. Bạn vui lòng giữ liên lạc nhé!"
+  };
+
   // System status
   async function updateSystemStatus() {
     try {
@@ -1166,7 +1212,6 @@ Ví dụ:
             `<span class="badge unread">${unreadCount} chưa đọc</span>` : 
             '<span class="badge">Đã đọc</span>';
         
-        // Hiển thị tên người gửi đúng cách
         const sendersText = conv.senders_text || conv.senders_list?.join(', ') || 'Không có thông tin';
         
         return `
@@ -1179,6 +1224,9 @@ Ví dụ:
                 <div class="right">
                     <div class="conv-meta">${time}</div>
                     ${unreadBadge}
+                    <div class="conv-meta" style="margin-top:4px;">
+                        <small><a href="https://www.facebook.com/messages/t/${conv.id}" target="_blank" onclick="event.stopPropagation()">🔗 Facebook</a></small>
+                    </div>
                 </div>
             </div>
         `;
@@ -1186,7 +1234,7 @@ Ví dụ:
     
     container.innerHTML = html;
     window.conversationsData = conversations;
-}
+  }
 
   // Load conversation messages
   async function loadConversationMessages(convIndex) {
@@ -1195,9 +1243,11 @@ Ví dụ:
 
     const messagesBox = $('#thread_messages');
     const status = $('#thread_status');
+    const threadHeader = $('#thread_header');
     
     messagesBox.innerHTML = '<div class="muted">Đang tải tin nhắn...</div>';
     status.textContent = 'Đang tải...';
+    threadHeader.textContent = `💬 ${conv.senders_text || 'Hội thoại'}`;
 
     try {
       const params = new URLSearchParams({
@@ -1217,8 +1267,45 @@ Ví dụ:
       renderMessages(messages);
       status.textContent = `Đã tải ${messages.length} tin nhắn`;
       
+      // Cập nhật Facebook links
+      updateFacebookLinks(conv, conv.page_id);
+      
+      // Hiển thị quick replies
+      $('#quick_replies_container').style.display = 'block';
+      
     } catch (error) {
       messagesBox.innerHTML = `<div class="status error">Lỗi: ${error.message}</div>`;
+    }
+  }
+
+  // Update Facebook links
+  function updateFacebookLinks(conv, pageId) {
+    const conversationBtn = $('#btn_open_conversation');
+    const pageBtn = $('#btn_open_page');
+    const status = $('#facebook_links_status');
+    
+    if (conv && pageId) {
+        // Tạo link Facebook
+        const conversationLink = `https://www.facebook.com/messages/t/${conv.id}`;
+        const pageLink = `https://www.facebook.com/${pageId}`;
+        
+        // Cập nhật link cho buttons
+        conversationBtn.onclick = () => window.open(conversationLink, '_blank');
+        pageBtn.onclick = () => window.open(pageLink, '_blank');
+        
+        // Bật buttons
+        conversationBtn.disabled = false;
+        pageBtn.disabled = false;
+        
+        status.textContent = '✅ Link sẵn sàng - Click để mở trên Facebook';
+        
+        // Lưu thông tin hiện tại
+        currentConversation = conv;
+        currentPage = pageId;
+    } else {
+        conversationBtn.disabled = true;
+        pageBtn.disabled = true;
+        status.textContent = 'Chọn hội thoại để xem link';
     }
   }
 
@@ -1229,7 +1316,6 @@ Ví dụ:
         const time = msg.created_time ? new Date(msg.created_time).toLocaleString('vi-VN') : '';
         const isPage = msg.is_page;
         
-        // Sử dụng from_name thay vì from.name
         const fromName = msg.from_name || msg.from?.name || 'Unknown';
         let messageContent = msg.message || '(Không có nội dung văn bản)';
         
@@ -1244,11 +1330,30 @@ Ví dụ:
             });
         }
         
+        // Thêm action buttons cho tin nhắn không phải từ page
+        let actionButtons = '';
+        if (!isPage && currentConversation) {
+            actionButtons = `
+                <div class="conv-actions">
+                    <button class="btn" onclick="quickReply('${msg.from?.id || ''}', '${msg.message || ''}')" title="Trả lời nhanh">
+                        ⚡ Trả lời
+                    </button>
+                    <button class="btn" onclick="openUserProfile('${msg.from?.id || ''}')" title="Xem profile">
+                        👤 Profile
+                    </button>
+                </div>
+            `;
+        }
+        
         return `
             <div style="display: flex; justify-content: ${isPage ? 'flex-end' : 'flex-start'}; margin: 8px 0;">
                 <div class="bubble ${isPage ? 'right' : ''}">
-                    <div class="meta">${fromName} • ${time}</div>
+                    <div class="meta">
+                        ${fromName} • ${time}
+                        ${!isPage ? `<a href="https://facebook.com/${msg.from?.id}" target="_blank" style="margin-left:8px;">🔗</a>` : ''}
+                    </div>
                     <div>${messageContent}</div>
+                    ${actionButtons}
                 </div>
             </div>
         `;
@@ -1256,7 +1361,38 @@ Ví dụ:
     
     container.innerHTML = html;
     container.scrollTop = container.scrollHeight;
-}
+  }
+
+  // Hàm trả lời nhanh
+  function quickReply(userId, message) {
+    if (userId && message) {
+        // Tạo reply text gợi ý dựa trên tin nhắn cũ
+        let replyText = '';
+        if (message.includes('?')) {
+            replyText = `Xin chào! Về câu hỏi "${message.substring(0, 50)}..." của bạn: `;
+        } else {
+            replyText = `Cảm ơn bạn đã liên hệ! `;
+        }
+        
+        $('#reply_text').value = replyText;
+        $('#reply_text').focus();
+    }
+  }
+
+  // Hàm mở profile user
+  function openUserProfile(userId) {
+    if (userId) {
+        window.open(`https://facebook.com/${userId}`, '_blank');
+    }
+  }
+
+  // Set quick reply
+  function setQuickReply(key) {
+    if (quickReplies[key]) {
+        $('#reply_text').value = quickReplies[key];
+        $('#reply_text').focus();
+    }
+  }
 
   // AI Content Generation với SEO
   async function generateAIContent() {
@@ -1589,8 +1725,8 @@ Ví dụ:
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            conversation_id: window.currentConversation?.id,
-            page_id: window.currentConversation?.page_id,
+            conversation_id: currentConversation?.id,
+            page_id: currentConversation?.page_id,
             message: text,
             media_url: mediaUrl
           })
@@ -2427,7 +2563,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     
     print("=" * 60)
-    print("🚀 AKUTA Content Manager 2025 - SEO OPTIMIZED")
+    print("🚀 AKUTA Content Manager 2025 - HOÀN THIỆN")
     print("=" * 60)
     print(f"📍 Port: {port}")
     print(f"📊 Total pages: {len(PAGE_TOKENS)}")
@@ -2448,6 +2584,12 @@ if __name__ == "__main__":
     print("   • 4 danh mục template: Khuyến mãi, Bảo mật, Game, Mobile")
     print("   • Prompt tuỳ chỉnh linh hoạt")
     print("   • Lưu template vào local storage")
+    print("=" * 60)
+    print("💬 Inbox Features:")
+    print("   • Link trực tiếp đến Facebook Messenger")
+    print("   • Quick reply templates")
+    print("   • Mở profile người gửi")
+    print("   • Hiển thị ảnh đính kèm")
     print("=" * 60)
     print("🔗 URLs:")
     print(f"   • Main: http://0.0.0.0:{port}")
