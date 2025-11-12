@@ -257,7 +257,6 @@ Khám phá thế giới giải trí trực tuyến đẳng cấp với {keyword}
 📞 **HỖ TRỢ KHÁCH HÀNG CHUYÊN NGHIỆP:**
 • Hotline: 0363269604 (Hỗ trợ 24/7 kể cả ngày lễ)
 • Telegram: @cattien999
-• Email: support@{keyword.lower()}.com
 • Thời gian làm việc: Tất cả các ngày trong tuần
 
 💫 ĐĂNG KÝ NGAY để không bỏ lỡ cơ hội trúng thưởng SIÊU KHỦNG!
@@ -273,7 +272,7 @@ Khám phá thế giới giải trí trực tuyến đẳng cấp với {keyword}
     
     def _generate_hashtags(self, keyword):
         """Tạo hashtag SEO tối ưu"""
-        # Base hashtags (6 hashtag cố định)
+        # Base hashtags (6 hashtag cố định theo từ khóa của page)
         base_tags = [tag.format(keyword=keyword) for tag in self.base_hashtags]
         
         # Additional hashtags (chọn ngẫu nhiên 10-15 hashtag)
@@ -307,8 +306,17 @@ class AIContentWriter:
             - Độ dài: 180-280 từ (tối ưu cho Facebook)
             - Ngôn ngữ: Tiếng Việt tự nhiên, thu hút, kích thích tương tác
             - Nội dung: Quảng cáo dịch vụ giải trí trực tuyến NHƯNG TUYỆT ĐỐI KHÔNG VI PHẠM CHÍNH SÁCH
-            - Cấu trúc: Tiêu đề hấp dẫn → Giới thiệu ngắn → Điểm nổi bật → Ưu đãi → Thông tin liên hệ
+            - Cấu trúc: 
+              • Dòng 1: Tiêu đề hấp dẫn với icon 🎯
+              • Dòng 2: #{keyword} ➡️ {source}
+              • Giới thiệu ngắn → Điểm nổi bật → Ưu đãi → Thông tin liên hệ
             - Link: {source}
+            
+            **THÔNG TIN LIÊN HỆ CỐ ĐỊNH (BẮT BUỘC):**
+            • Hotline: 0363269604 (Hỗ trợ 24/7 kể cả ngày lễ)
+            • Telegram: @cattien999
+            • Thời gian làm việc: Tất cả các ngày trong tuần
+            → KHÔNG ĐƯỢC THÊM EMAIL VÀO THÔNG TIN LIÊN HỆ
             
             **LƯU Ý QUAN TRỌNG:**
             - KHÔNG dùng từ ngữ nhạy cảm, cờ bạc trực tiếp
@@ -317,10 +325,34 @@ class AIContentWriter:
             - Tự nhiên, không spam, không cảm giác quảng cáo quá lố
             
             **HASHTAG (QUAN TRỌNG):**
-            BẮT BUỘC phải có 6 hashtag chính:
+            BẮT BUỘC phải có 6 hashtag chính với từ khóa "{keyword}":
             #{keyword} #LinkChínhThức{keyword} #{keyword}AnToàn #HỗTrợLấyLạiTiền{keyword} #RútTiền{keyword} #MởKhóaTàiKhoản{keyword}
             
             Và thêm 10-15 hashtag phụ liên quan đến giải trí, game, casino online.
+            
+            **CẤU TRÚC BÀI VIẾT MẪU:**
+            🎯 [Từ khóa] - NỀN TẢNG GIẢI TRÍ ĐỈNH CAO 2025
+            
+            #[Từ khóa] ➡️ [Link nguồn]
+            
+            [Nội dung giới thiệu hấp dẫn...]
+            
+            ✨ **ĐIỂM NỔI BẬT ĐỘC QUYỀN:**
+            ✅ [Tính năng 1]
+            ✅ [Tính năng 2]
+            
+            🎁 **ƯU ĐÃI ĐẶC BIỆT:**
+            ⭐ [Ưu đãi 1]
+            ⭐ [Ưu đãi 2]
+            
+            📞 **HỖ TRỢ KHÁCH HÀNG:**
+            • Hotline: 0363269604
+            • Telegram: @cattien999
+            • Thời gian làm việc: Tất cả các ngày
+            
+            💫 [Lời kêu gọi hành động]
+            
+            [Hashtag]
             
             Yêu cầu thêm từ người dùng: {user_prompt}
             """
@@ -328,7 +360,7 @@ class AIContentWriter:
             response = self.client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "Bạn là chuyên gia content marketing SEO cho lĩnh vực giải trí trực tuyến. Bạn cực kỳ giỏi trong việc tạo nội dung thu hút mà không vi phạm chính sách."},
+                    {"role": "system", "content": "Bạn là chuyên gia content marketing SEO cho lĩnh vực giải trí trực tuyến. Bạn cực kỳ giỏi trong việc tạo nội dung thu hút mà không vi phạm chính sách. LUÔN tuân thủ cấu trúc và thông tin liên hệ cố định được cung cấp."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=1200,
