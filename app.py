@@ -223,7 +223,7 @@ class SEOContentGenerator:
                 "#Jackpot", "#Bonus", "#KhuyếnMãi", "#ThưởngNóng", "#FreeSpin"
             ],
             "general": [
-                "#UyTín", "#BảoMật", "#NạpRútNhanh", "#HỗTrợ24/7", "#KhuyếnMãi",
+                "#UyTín", "#BảoMật", "#NạpRútNhanh", "#HỗTrỢ24/7", "#KhuyếnMãi",
                 "#ĐăngKýNgay", "#TrảiNghiệmMới", "#CơHộiTrúngLớn", "#ThắngLớn",
                 "#ChiếnThắng", "#MayMắn", "#TỷLệCao", "#MinRútThấp", "#ƯuĐãi"
             ]
@@ -405,8 +405,9 @@ def _uniq_save_corpus(corpus: dict):
         print(f"Error saving corpus: {e}")
 
 def _uniq_norm(s: str) -> str:
-    """Chuẩn hóa chuỗi"""
-    s = re.sub(r"\s+", " ", (s or "").strip())
+    """Chuẩn hóa chuỗi - ĐÃ SỬA LỖI NoneType"""
+    s = str(s or "")  # Đảm bảo luôn là string
+    s = re.sub(r"\s+", " ", s.strip())
     s = re.sub(r"[^\w\s]", "", s)
     return s.lower()
 
@@ -1859,7 +1860,7 @@ def api_inbox_reply():
         data = request.get_json()
         conversation_id = data.get("conversation_id")
         page_id = data.get("page_id")
-        message = data.get("message", "").strip()
+        message = (data.get("message") or "").strip()  # ĐÃ SỬA LỖI NoneType
         media_url = data.get("media_url")
         
         if not conversation_id or not page_id:
@@ -1906,7 +1907,7 @@ def api_ai_generate():
     try:
         data = request.get_json()
         page_id = data.get("page_id")
-        user_prompt = data.get("prompt", "")
+        user_prompt = (data.get("prompt") or "").strip()  # ĐÃ SỬA LỖI NoneType
         
         if not page_id:
             return jsonify({"error": "Thiếu page_id"}), 400
@@ -1969,8 +1970,8 @@ def api_pages_post():
     try:
         data = request.get_json()
         pages = data.get("pages", [])
-        text_content = data.get("text", "").strip()
-        media_url = data.get("media_url", "").strip() or None
+        text_content = (data.get("text") or "").strip()  # ĐÃ SỬA LỖI NoneType
+        media_url = (data.get("media_url") or "").strip() or None  # ĐÃ SỬA LỖI NoneType
         post_type = data.get("post_type", "feed")
         
         if not pages:
@@ -2308,7 +2309,7 @@ def api_seo_hashtags():
     """API tạo hashtag SEO"""
     try:
         data = request.get_json()
-        keyword = data.get("keyword", "").strip()
+        keyword = (data.get("keyword") or "").strip()  # ĐÃ SỬA LỖI NoneType
         
         if not keyword:
             return jsonify({"error": "Thiếu từ khoá"}), 400
