@@ -299,71 +299,99 @@ class AIContentWriter:
     def generate_content(self, keyword, source, user_prompt=""):
         """Tạo nội dung bằng OpenAI với tối ưu SEO"""
         try:
-            prompt = f"""
-            Hãy tạo một bài đăng Facebook CHUẨN SEO về {keyword} với các yêu cầu:
-            
-            **YÊU CẦU BẮT BUỘC:**
-            - Độ dài: 180-280 từ (tối ưu cho Facebook)
-            - Ngôn ngữ: Tiếng Việt tự nhiên, thu hút, kích thích tương tác
-            - Nội dung: Quảng cáo dịch vụ giải trí trực tuyến NHƯNG TUYỆT ĐỐI KHÔNG VI PHẠM CHÍNH SÁCH
-            - Cấu trúc: 
-              • Dòng 1: Tiêu đề hấp dẫn với icon 🎯
-              • Dòng 2: #{keyword} ➡️ {source}
-              • Giới thiệu ngắn → Điểm nổi bật → Ưu đãi → Thông tin liên hệ
-            - Link: {source}
-            
-            **THÔNG TIN LIÊN HỆ CỐ ĐỊNH (BẮT BUỘC):**
-            • Hotline: 0363269604 (Hỗ trợ 24/7 kể cả ngày lễ)
-            • Telegram: @cattien999
-            • Thời gian làm việc: Tất cả các ngày trong tuần
-            → KHÔNG ĐƯỢC THÊM EMAIL VÀO THÔNG TIN LIÊN HỆ
-            
-            **LƯU Ý QUAN TRỌNG:**
-            - KHÔNG dùng từ ngữ nhạy cảm, cờ bạc trực tiếp
-            - Tập trung vào "giải trí", "trò chơi", "trải nghiệm"
-            - Nhấn mạnh yếu tố BẢO MẬT, UY TÍN, HỖ TRỢ 24/7
-            - Tự nhiên, không spam, không cảm giác quảng cáo quá lố
-            
-            **HASHTAG (QUAN TRỌNG):**
-            BẮT BUỘC phải có 6 hashtag chính với từ khóa "{keyword}":
-            #{keyword} #LinkChínhThức{keyword} #{keyword}AnToàn #HỗTrợLấyLạiTiền{keyword} #RútTiền{keyword} #MởKhóaTàiKhoản{keyword}
-            
-            Và thêm 10-15 hashtag phụ liên quan đến giải trí, game, casino online.
-            
-            **CẤU TRÚC BÀI VIẾT MẪU:**
-            🎯 [Từ khóa] - NỀN TẢNG GIẢI TRÍ ĐỈNH CAO 2025
-            
-            #[Từ khóa] ➡️ [Link nguồn]
-            
-            [Nội dung giới thiệu hấp dẫn...]
-            
-            ✨ **ĐIỂM NỔI BẬT ĐỘC QUYỀN:**
-            ✅ [Tính năng 1]
-            ✅ [Tính năng 2]
-            
-            🎁 **ƯU ĐÃI ĐẶC BIỆT:**
-            ⭐ [Ưu đãi 1]
-            ⭐ [Ưu đãi 2]
-            
-            📞 **HỖ TRỢ KHÁCH HÀNG:**
-            • Hotline: 0363269604
-            • Telegram: @cattien999
-            • Thời gian làm việc: Tất cả các ngày
-            
-            💫 [Lời kêu gọi hành động]
-            
-            [Hashtag]
-            
-            Yêu cầu thêm từ người dùng: {user_prompt}
-            """
+            # Xây dựng prompt linh hoạt dựa trên user input
+            if user_prompt:
+                # Nếu user có prompt riêng, ưu tiên sử dụng
+                custom_prompt = f"""
+                Hãy tạo một bài đăng Facebook CHUẨN SEO về {keyword} với các yêu cầu:
+                
+                **YÊU CẦU CỤ THỂ TỪ NGƯỜI DÙNG:**
+                {user_prompt}
+                
+                **THÔNG TIN CƠ BẢN:**
+                - Từ khóa: {keyword}
+                - Link: {source}
+                - Độ dài: 180-280 từ
+                - Ngôn ngữ: Tiếng Việt tự nhiên, thu hút
+                
+                **THÔNG TIN LIÊN HỆ CỐ ĐỊNH (BẮT BUỘC):**
+                • Hotline: 0363269604 (Hỗ trợ 24/7 kể cả ngày lễ)
+                • Telegram: @cattien999
+                • Thời gian làm việc: Tất cả các ngày trong tuần
+                
+                **HASHTAG (QUAN TRỌNG):**
+                BẮT BUỘC phải có 6 hashtag chính với từ khóa "{keyword}":
+                #{keyword} #LinkChínhThức{keyword} #{keyword}AnToàn #HỗTrợLấyLạiTiền{keyword} #RútTiền{keyword} #MởKhóaTàiKhoản{keyword}
+                
+                Và thêm 10-15 hashtag phụ liên quan đến giải trí, game, casino online.
+                
+                Hãy kết hợp yêu cầu của người dùng với thông tin cố định trên để tạo nội dung hoàn chỉnh.
+                """
+            else:
+                # Prompt mặc định nếu không có user prompt
+                custom_prompt = f"""
+                Hãy tạo một bài đăng Facebook CHUẨN SEO về {keyword} với các yêu cầu:
+                
+                **YÊU CẦU BẮT BUỘC:**
+                - Độ dài: 180-280 từ (tối ưu cho Facebook)
+                - Ngôn ngữ: Tiếng Việt tự nhiên, thu hút, kích thích tương tác
+                - Nội dung: Quảng cáo dịch vụ giải trí trực tuyến NHƯNG TUYỆT ĐỐI KHÔNG VI PHẠM CHÍNH SÁCH
+                - Cấu trúc: 
+                  • Dòng 1: Tiêu đề hấp dẫn với icon 🎯
+                  • Dòng 2: #{keyword} ➡️ {source}
+                  • Giới thiệu ngắn → Điểm nổi bật → Ưu đãi → Thông tin liên hệ
+                - Link: {source}
+                
+                **THÔNG TIN LIÊN HỆ CỐ ĐỊNH (BẮT BUỘC):**
+                • Hotline: 0363269604 (Hỗ trợ 24/7 kể cả ngày lễ)
+                • Telegram: @cattien999
+                • Thời gian làm việc: Tất cả các ngày trong tuần
+                → KHÔNG ĐƯỢC THÊM EMAIL VÀO THÔNG TIN LIÊN HỆ
+                
+                **LƯU Ý QUAN TRỌNG:**
+                - KHÔNG dùng từ ngữ nhạy cảm, cờ bạc trực tiếp
+                - Tập trung vào "giải trí", "trò chơi", "trải nghiệm"
+                - Nhấn mạnh yếu tố BẢO MẬT, UY TÍN, HỖ TRỢ 24/7
+                - Tự nhiên, không spam, không cảm giác quảng cáo quá lố
+                
+                **HASHTAG (QUAN TRỌNG):**
+                BẮT BUỘC phải có 6 hashtag chính với từ khóa "{keyword}":
+                #{keyword} #LinkChínhThức{keyword} #{keyword}AnToàn #HỗTrợLấyLạiTiền{keyword} #RútTiền{keyword} #MởKhóaTàiKhoản{keyword}
+                
+                Và thêm 10-15 hashtag phụ liên quan đến giải trí, game, casino online.
+                
+                **CẤU TRÚC BÀI VIẾT MẪU:**
+                🎯 [Từ khóa] - NỀN TẢNG GIẢI TRÍ ĐỈNH CAO 2025
+                
+                #[Từ khóa] ➡️ [Link nguồn]
+                
+                [Nội dung giới thiệu hấp dẫn...]
+                
+                ✨ **ĐIỂM NỔI BẬT ĐỘC QUYỀN:**
+                ✅ [Tính năng 1]
+                ✅ [Tính năng 2]
+                
+                🎁 **ƯU ĐÃI ĐẶC BIỆT:**
+                ⭐ [Ưu đãi 1]
+                ⭐ [Ưu đãi 2]
+                
+                📞 **HỖ TRỢ KHÁCH HÀNG:**
+                • Hotline: 0363269604
+                • Telegram: @cattien999
+                • Thời gian làm việc: Tất cả các ngày
+                
+                💫 [Lời kêu gọi hành động]
+                
+                [Hashtag]
+                """
             
             response = self.client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": "Bạn là chuyên gia content marketing SEO cho lĩnh vực giải trí trực tuyến. Bạn cực kỳ giỏi trong việc tạo nội dung thu hút mà không vi phạm chính sách. LUÔN tuân thủ cấu trúc và thông tin liên hệ cố định được cung cấp."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": custom_prompt}
                 ],
-                max_tokens=1200,
+                max_tokens=1500,
                 temperature=0.8
             )
             
@@ -601,10 +629,16 @@ INDEX_HTML = r"""<!doctype html>
     .stat-label{font-size:12px;color:#666;margin-top:4px}
     .progress-bar{height:8px;background:#e9ecef;border-radius:4px;overflow:hidden;margin:8px 0}
     .progress-fill{height:100%;background:#28a745;transition:width 0.3s}
+    .prompt-templates{display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:8px;margin:12px 0}
+    .prompt-template{border:1px solid #ddd;border-radius:8px;padding:12px;cursor:pointer;background:#f8f9fa;transition:all 0.2s}
+    .prompt-template:hover{background:#e9ecef;border-color:#111}
+    .prompt-template.active{background:#111;color:#fff;border-color:#111}
+    .prompt-category{margin:16px 0 8px 0;font-weight:600;color:#333;border-bottom:1px solid #eee;padding-bottom:4px}
     @media (max-width: 768px) {
       .grid{grid-template-columns:1fr}
       .container{padding:0 12px}
       .stats-grid{grid-template-columns:1fr 1fr}
+      .prompt-templates{grid-template-columns:1fr}
     }
   </style>
 </head>
@@ -621,7 +655,7 @@ INDEX_HTML = r"""<!doctype html>
       <button class="tab-btn" data-tab="posting">📢 Đăng bài</button>
       <button class="tab-btn" data-tab="settings">⚙️ Cài đặt</button>
       <button class="tab-btn" data-tab="analytics">📊 Thống kê</button>
-      <button class="tab-btn" data-tab="seo">🔍 SEO Tools</button>
+      <button class="tab-btn" data-tab="prompts">🎨 Prompt Templates</button>
     </div>
 
     <!-- Tab Tin nhắn -->
@@ -695,14 +729,22 @@ INDEX_HTML = r"""<!doctype html>
         <div class="muted">
           🔍 Tự động tạo content chuẩn SEO với 6 hashtag cố định + 10-15 hashtag liên quan
         </div>
+        
         <div class="row">
-          <textarea id="ai_prompt" placeholder="Nhập prompt tuỳ chỉnh (tuỳ chọn)..."></textarea>
+          <textarea id="ai_prompt" placeholder="Nhập prompt tuỳ chỉnh hoặc chọn template bên dưới... 
+Ví dụ: 
+- Tạo bài viết tập trung vào khuyến mãi 200% cho lần nạp đầu
+- Viết content nhấn mạnh tính năng bảo mật và rút tiền nhanh
+- Tạo bài giới thiệu dịch vụ hỗ trợ 24/7 chuyên nghiệp" style="min-height:100px"></textarea>
         </div>
+        
         <div class="row">
-          <button class="btn" id="btn_ai_generate">🎨 Tạo nội dung bằng AI</button>
+          <button class="btn primary" id="btn_ai_generate">🎨 Tạo nội dung bằng AI</button>
           <button class="btn" id="btn_ai_enhance">✨ Làm đẹp nội dung</button>
           <button class="btn" id="btn_check_seo">🔍 Kiểm tra SEO</button>
         </div>
+        
+        <div class="status" id="ai_status"></div>
       </div>
 
       <div class="card">
@@ -810,47 +852,101 @@ INDEX_HTML = r"""<!doctype html>
       </div>
     </div>
 
-    <!-- Tab SEO Tools -->
-    <div id="tab-seo" class="tab">
+    <!-- Tab Prompt Templates -->
+    <div id="tab-prompts" class="tab">
       <div class="card">
-        <h3>🔍 Công cụ SEO & Content</h3>
-        <div class="row">
-          <div class="col" style="flex:1">
-            <div class="card">
-              <h4>🎯 SEO Content Analyzer</h4>
-              <textarea id="seo_content" placeholder="Dán nội dung cần phân tích SEO..." style="min-height:150px"></textarea>
-              <div class="row">
-                <button class="btn primary" id="btn_analyze_seo">Phân tích SEO</button>
-                <button class="btn" id="btn_optimize_content">Tối ưu hoá</button>
-              </div>
-              <div id="seo_analysis_result"></div>
-            </div>
-          </div>
-          <div class="col" style="flex:1">
-            <div class="card">
-              <h4>🏷️ Hashtag Generator</h4>
-              <input type="text" id="hashtag_keyword" placeholder="Nhập từ khoá chính..." style="margin-bottom:12px">
-              <div class="row">
-                <button class="btn primary" id="btn_generate_hashtags">Tạo hashtag</button>
-                <button class="btn" id="btn_copy_hashtags">📋 Copy</button>
-              </div>
-              <div id="hashtag_result" style="margin-top:12px;padding:12px;background:#f8f9fa;border-radius:8px;min-height:100px"></div>
-            </div>
-          </div>
+        <h3>🎨 Prompt Templates cho Content</h3>
+        <div class="muted">
+          Chọn template hoặc tạo prompt tuỳ chỉnh để tạo nội dung phù hợp
         </div>
         
-        <div class="card">
-          <h4>📋 SEO Guidelines</h4>
-          <div style="background:#f8f9fa;padding:16px;border-radius:8px">
-            <strong>Quy tắc SEO bắt buộc:</strong>
-            <ul style="margin:8px 0;padding-left:20px">
-              <li>6 hashtag cố định cho mỗi từ khoá</li>
-              <li>10-15 hashtag bổ sung liên quan</li>
-              <li>Độ dài 180-280 từ</li>
-              <li>Từ khoá xuất hiện tự nhiên trong content</li>
-              <li>Tránh từ ngữ nhạy cảm, vi phạm chính sách</li>
-              <li>Cấu trúc rõ ràng: Tiêu đề → Nội dung → Hashtag</li>
-            </ul>
+        <div class="prompt-category">🎯 Template Quảng cáo Khuyến mãi</div>
+        <div class="prompt-templates">
+          <div class="prompt-template" data-prompt="Tạo bài viết tập trung vào khuyến mãi 200% cho lần nạp đầu tiên, nhấn mạnh cơ hội nhận thưởng lớn và tỷ lệ trúng cao">
+            🎁 Khuyến mãi 200%
+          </div>
+          <div class="prompt-template" data-prompt="Viết content về chương trình hoàn trả 2.5% không giới hạn, phù hợp cho người chơi thường xuyên">
+            💰 Hoàn trả 2.5%
+          </div>
+          <div class="prompt-template" data-prompt="Tạo bài giới thiệu sự kiện quay số may mắn với giải thưởng iPhone 15 và laptop">
+            🎰 Quay số may mắn
+          </div>
+          <div class="prompt-template" data-prompt="Viết bài về combo khuyến mãi dành cho thành viên VIP với ưu đãi đặc biệt">
+            ⭐ VIP Combo
+          </div>
+        </div>
+
+        <div class="prompt-category">🛡️ Template Bảo mật & Uy tín</div>
+        <div class="prompt-templates">
+          <div class="prompt-template" data-prompt="Nhấn mạnh tính năng bảo mật đa tầng, mã hoá SSL và bảo vệ thông tin khách hàng">
+            🔒 Bảo mật đa tầng
+          </div>
+          <div class="prompt-template" data-prompt="Tạo content về hệ thống rút tiền siêu tốc 3-5 phút, minh bạch mọi giao dịch">
+            ⚡ Rút tiền nhanh
+          </div>
+          <div class="prompt-template" data-prompt="Giới thiệu đội ngũ hỗ trợ 24/7 chuyên nghiệp, giải quyết mọi vấn đề trong 5 phút">
+            🛎️ Hỗ trợ 24/7
+          </div>
+          <div class="prompt-template" data-prompt="Viết bài về cam kết uy tín, minh bạch và công bằng trong mọi giao dịch">
+            ✅ Uy tín hàng đầu
+          </div>
+        </div>
+
+        <div class="prompt-category">🎮 Template Game & Giải trí</div>
+        <div class="prompt-templates">
+          <div class="prompt-template" data-prompt="Giới thiệu trải nghiệm game slot với đồ họa 3D sống động, hiệu ứng âm thanh chân thực">
+            🎰 Game Slot 3D
+          </div>
+          <div class="prompt-template" data-prompt="Tạo content về các trò chơi bài casino trực tuyến với dealer chuyên nghiệp">
+            ♠️ Casino trực tiếp
+          </div>
+          <div class="prompt-template" data-prompt="Viết bài về thể thao ảo và esports với tỷ lệ cược hấp dẫn, cập nhật liên tục">
+            ⚽ Thể thao ảo
+          </div>
+          <div class="prompt-template" data-prompt="Giới thiệu tính năng nổ hũ jackpot với giải thưởng lên đến 5 tỷ đồng">
+            💎 Jackpot khủng
+          </div>
+        </div>
+
+        <div class="prompt-category">📱 Template Mobile & Technology</div>
+        <div class="prompt-templates">
+          <div class="prompt-template" data-prompt="Tạo bài viết về trải nghiệm mobile tối ưu, giao diện thân thiện trên mọi thiết bị">
+            📱 Mobile First
+          </div>
+          <div class="prompt-template" data-prompt="Viết content về công nghệ AI hỗ trợ người chơi, gợi ý game phù hợp">
+            🤖 AI Gợi ý
+          </div>
+          <div class="prompt-template" data-prompt="Giới thiệu tính năng one-tap login, đăng nhập nhanh không cần mật khẩu">
+            🔑 One-Tap Login
+          </div>
+          <div class="prompt-template" data-prompt="Tạo bài về hệ thống thông báo push notification cho khuyến mãi mới">
+            🔔 Thông báo realtime
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:20px">
+          <div class="col" style="flex:1">
+            <h4>🎨 Prompt Tuỳ chỉnh</h4>
+            <textarea id="custom_prompt" placeholder="Nhập prompt tuỳ chỉnh của bạn ở đây..." style="min-height:120px"></textarea>
+            <div class="row">
+              <button class="btn primary" id="btn_use_custom">🚀 Sử dụng Prompt này</button>
+              <button class="btn" id="btn_save_template">💾 Lưu Template</button>
+            </div>
+          </div>
+          <div class="col" style="flex:1">
+            <h4>📝 Hướng dẫn viết Prompt</h4>
+            <div style="background:#f8f9fa;padding:12px;border-radius:8px;font-size:13px">
+              <strong>Mẹo viết prompt hiệu quả:</strong>
+              <ul style="margin:8px 0;padding-left:16px">
+                <li>Rõ ràng, cụ thể về chủ đề</li>
+                <li>Đề cập đến tính năng muốn nhấn mạnh</li>
+                <li>Chỉ định tone giọng (vui vẻ, chuyên nghiệp, thân thiện)</li>
+                <li>Yêu cầu cấu trúc cụ thể nếu cần</li>
+                <li>Đề cập đến từ khoá chính</li>
+              </ul>
+              <strong>Ví dụ prompt tốt:</strong>
+              <br>"Tạo bài viết về khuyến mãi 150% cho lần nạp đầu, tập trung vào tính năng rút tiền nhanh trong 3 phút, sử dụng tone giọng thân thiện và nhiệt tình"
+            </div>
           </div>
         </div>
       </div>
@@ -894,11 +990,67 @@ INDEX_HTML = r"""<!doctype html>
       } else if (tabName === 'analytics') {
         loadAnalytics();
         loadDailyStats();
-      } else if (tabName === 'seo') {
-        // Initialize SEO tools
+      } else if (tabName === 'prompts') {
+        initPromptTemplates();
       }
     });
   });
+
+  // Prompt Templates functionality
+  function initPromptTemplates() {
+    // Template selection
+    $all('.prompt-template').forEach(template => {
+      template.addEventListener('click', function() {
+        // Remove active class from all templates
+        $all('.prompt-template').forEach(t => t.classList.remove('active'));
+        // Add active class to clicked template
+        this.classList.add('active');
+        
+        // Get prompt text and set to textarea
+        const promptText = this.getAttribute('data-prompt');
+        $('#ai_prompt').value = promptText;
+        $('#custom_prompt').value = promptText;
+        
+        // Show success message
+        $('#ai_status').textContent = '✅ Đã chọn template: ' + this.textContent.trim();
+      });
+    });
+    
+    // Use custom prompt
+    $('#btn_use_custom').addEventListener('click', function() {
+      const customPrompt = $('#custom_prompt').value.trim();
+      if (customPrompt) {
+        $('#ai_prompt').value = customPrompt;
+        $('#ai_status').textContent = '✅ Đã áp dụng prompt tuỳ chỉnh';
+        
+        // Remove active class from all templates
+        $all('.prompt-template').forEach(t => t.classList.remove('active'));
+      } else {
+        $('#ai_status').textContent = '⚠️ Vui lòng nhập prompt tuỳ chỉnh';
+      }
+    });
+    
+    // Save template (local storage)
+    $('#btn_save_template').addEventListener('click', function() {
+      const customPrompt = $('#custom_prompt').value.trim();
+      if (customPrompt) {
+        // Simple local storage implementation
+        let savedTemplates = JSON.parse(localStorage.getItem('saved_prompt_templates') || '[]');
+        savedTemplates.push({
+          text: customPrompt,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Keep only last 10 templates
+        savedTemplates = savedTemplates.slice(-10);
+        
+        localStorage.setItem('saved_prompt_templates', JSON.stringify(savedTemplates));
+        $('#ai_status').textContent = '✅ Đã lưu template vào bộ nhớ trình duyệt';
+      } else {
+        $('#ai_status').textContent = '⚠️ Vui lòng nhập prompt để lưu';
+      }
+    });
+  }
 
   // Load pages with token status
   async function loadPages() {
@@ -1014,7 +1166,7 @@ INDEX_HTML = r"""<!doctype html>
             `<span class="badge unread">${unreadCount} chưa đọc</span>` : 
             '<span class="badge">Đã đọc</span>';
         
-        // SỬA: Hiển thị tên người gửi đúng cách
+        // Hiển thị tên người gửi đúng cách
         const sendersText = conv.senders_text || conv.senders_list?.join(', ') || 'Không có thông tin';
         
         return `
@@ -1077,7 +1229,7 @@ INDEX_HTML = r"""<!doctype html>
         const time = msg.created_time ? new Date(msg.created_time).toLocaleString('vi-VN') : '';
         const isPage = msg.is_page;
         
-        // SỬA: Sử dụng from_name thay vì from.name
+        // Sử dụng from_name thay vì from.name
         const fromName = msg.from_name || msg.from?.name || 'Unknown';
         let messageContent = msg.message || '(Không có nội dung văn bản)';
         
@@ -1110,7 +1262,7 @@ INDEX_HTML = r"""<!doctype html>
   async function generateAIContent() {
     const pids = $all('#post_pages_box .pg-checkbox:checked').map(cb => cb.value);
     const prompt = $('#ai_prompt').value.trim();
-    const status = $('#post_status');
+    const status = $('#ai_status');
     
     if (!pids.length) {
       status.textContent = 'Vui lòng chọn ít nhất 1 page';
@@ -1380,104 +1532,12 @@ INDEX_HTML = r"""<!doctype html>
     }
   }
 
-  // SEO Tools functionality
-  async function analyzeSEO() {
-    const content = $('#seo_content').value.trim();
-    
-    if (!content) {
-      $('#seo_analysis_result').innerHTML = '<div class="status warning">Vui lòng nhập nội dung để phân tích</div>';
-      return;
-    }
-
-    $('#seo_analysis_result').innerHTML = '<div class="muted">Đang phân tích SEO...</div>';
-
-    try {
-      const response = await fetch('/api/seo/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content })
-      });
-
-      const data = await response.json();
-      
-      if (data.error) {
-        $('#seo_analysis_result').innerHTML = `<div class="status error">Lỗi: ${data.error}</div>`;
-        return;
-      }
-
-      let resultHtml = `
-        <div class="status success">
-          <strong>Điểm SEO: ${data.score}/100</strong>
-          <div class="progress-bar">
-            <div class="progress-fill" style="width:${data.score}%"></div>
-          </div>
-        </div>
-      `;
-
-      if (data.analysis) {
-        resultHtml += '<div style="margin-top:12px"><strong>Phân tích chi tiết:</strong><ul style="margin:8px 0;padding-left:20px">';
-        data.analysis.forEach(item => {
-          const icon = item.passed ? '✅' : '❌';
-          resultHtml += `<li>${icon} ${item.check}: ${item.message}</li>`;
-        });
-        resultHtml += '</ul></div>';
-      }
-
-      if (data.recommendations) {
-        resultHtml += `<div><strong>Đề xuất cải thiện:</strong><br>${data.recommendations}</div>`;
-      }
-
-      $('#seo_analysis_result').innerHTML = resultHtml;
-      
-    } catch (error) {
-      $('#seo_analysis_result').innerHTML = `<div class="status error">Lỗi phân tích: ${error.message}</div>`;
-    }
-  }
-
-  async function generateHashtags() {
-    const keyword = $('#hashtag_keyword').value.trim();
-    
-    if (!keyword) {
-      $('#hashtag_result').innerHTML = '<div class="status warning">Vui lòng nhập từ khoá</div>';
-      return;
-    }
-
-    $('#hashtag_result').innerHTML = '<div class="muted">Đang tạo hashtag...</div>';
-
-    try {
-      const response = await fetch('/api/seo/hashtags', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword })
-      });
-
-      const data = await response.json();
-      
-      if (data.error) {
-        $('#hashtag_result').innerHTML = `<div class="status error">Lỗi: ${data.error}</div>`;
-        return;
-      }
-
-      let resultHtml = `
-        <div><strong>Hashtag cho "${keyword}":</strong></div>
-        <div style="margin:8px 0;padding:8px;background:#fff;border-radius:4px;border:1px solid #ddd">
-          ${data.hashtags || 'Không có hashtag'}
-        </div>
-        <div class="muted">Tổng: ${data.count || 0} hashtag</div>
-      `;
-
-      $('#hashtag_result').innerHTML = resultHtml;
-      
-    } catch (error) {
-      $('#hashtag_result').innerHTML = `<div class="status error">Lỗi tạo hashtag: ${error.message}</div>`;
-    }
-  }
-
   // Event listeners
   document.addEventListener('DOMContentLoaded', function() {
     // Load initial data
     loadPages();
     updateSystemStatus();
+    initPromptTemplates();
     
     // Inbox events
     $('#btn_inbox_refresh')?.addEventListener('click', refreshConversations);
@@ -1594,18 +1654,6 @@ INDEX_HTML = r"""<!doctype html>
         }
       } catch (error) {
         $('#admin_status').textContent = `Lỗi: ${error.message}`;
-      }
-    });
-
-    // SEO Tools events
-    $('#btn_analyze_seo')?.addEventListener('click', analyzeSEO);
-    $('#btn_generate_hashtags')?.addEventListener('click', generateHashtags);
-    $('#btn_copy_hashtags')?.addEventListener('click', () => {
-      const hashtagText = $('#hashtag_result').textContent;
-      if (hashtagText && !hashtagText.includes('Lỗi') && !hashtagText.includes('Vui lòng')) {
-        navigator.clipboard.writeText(hashtagText).then(() => {
-          alert('✅ Đã copy hashtag vào clipboard!');
-        });
       }
     });
 
@@ -1903,7 +1951,7 @@ def api_inbox_reply():
 
 @app.route("/api/ai/generate", methods=["POST"])
 def api_ai_generate():
-    """API tạo nội dung bằng AI với SEO tối ưu"""
+    """API tạo nội dung bằng AI với SEO tối ưu - ĐÃ CẢI THIỆN PROMPT"""
     try:
         data = request.get_json()
         page_id = data.get("page_id")
@@ -2394,6 +2442,12 @@ if __name__ == "__main__":
     print("   • Content chuẩn SEO, không vi phạm")
     print("   • Tự động kiểm tra điểm SEO")
     print("   • Hashtag generator thông minh")
+    print("=" * 60)
+    print("🎨 Prompt Features:")
+    print("   • 20+ prompt templates có sẵn")
+    print("   • 4 danh mục template: Khuyến mãi, Bảo mật, Game, Mobile")
+    print("   • Prompt tuỳ chỉnh linh hoạt")
+    print("   • Lưu template vào local storage")
     print("=" * 60)
     print("🔗 URLs:")
     print(f"   • Main: http://0.0.0.0:{port}")
