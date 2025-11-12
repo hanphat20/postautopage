@@ -230,12 +230,12 @@ class SEOContentGenerator:
         }
     
     def generate_seo_content(self, keyword, source, prompt=""):
-        """Tạo nội dung chuẩn SEO với hashtag tối ưu"""
+        """Tạo nội dung chuẩn SEO với cấu trúc mới"""
         
-        # Base content template
-        base_content = f"""🎯 **{keyword} - NỀN TẢNG GIẢI TRÍ ĐỈNH CAO 2025**
+        # Base content template với cấu trúc mới
+        base_content = f"""🎯 {keyword} - NỀN TẢNG GIẢI TRÍ ĐỈNH CAO 2025
 
-🔗 **TRUY CẬP NGAY:** {source}
+#{keyword} ➡️ {source}
 
 Khám phá thế giới giải trí trực tuyến đẳng cấp với {keyword} - nền tảng được thiết kế dành riêng cho người chơi Việt Nam. Trải nghiệm dịch vụ chất lượng 5 sao với công nghệ bảo mật tối tân và hệ thống hỗ trợ chuyên nghiệp.
 
@@ -255,8 +255,8 @@ Khám phá thế giới giải trí trực tuyến đẳng cấp với {keyword}
 ⭐ COMBO QUÀ TẶNG ĐỘC QUYỀN cho thành viên VIP
 
 📞 **HỖ TRỢ KHÁCH HÀNG CHUYÊN NGHIỆP:**
-• Hotline: 0027395058 (Hỗ trợ 24/7 kể cả ngày lễ)
-• Telegram: @catten999
+• Hotline: 0363269604 (Hỗ trợ 24/7 kể cả ngày lễ)
+• Telegram: @cattien999
 • Email: support@{keyword.lower()}.com
 • Thời gian làm việc: Tất cả các ngày trong tuần
 
@@ -1002,6 +1002,7 @@ INDEX_HTML = r"""<!doctype html>
     container.innerHTML = html;
     window.conversationsData = conversations;
 }
+
   // Load conversation messages
   async function loadConversationMessages(convIndex) {
     const conv = window.conversationsData[convIndex];
@@ -1188,19 +1189,19 @@ INDEX_HTML = r"""<!doctype html>
       const success = results.filter(r => !r.error).length;
       const total = results.length;
       
-      s// Trong hàm postToPages, sửa phần xử lý kết quả:
-status.innerHTML = `
-    <div class="status success">
-        ✅ Đã đăng bài thành công cho ${success}/${total} pages
-        ${success < total ? '<br>⚠️ Một số pages có lỗi, kiểm tra token' : ''}
-    </div>
-    ${results.map(result => `
-        <div style="margin-top: 8px; font-size: 12px;">
-            <strong>${result.page_id}:</strong> 
-            ${result.link ? `<a href="${result.link}" target="_blank">✅ Xem bài đăng</a>` : '❌ ' + (result.error || 'Lỗi không xác định')}
+      // Hiển thị kết quả chi tiết
+      status.innerHTML = `
+        <div class="status success">
+            ✅ Đã đăng bài thành công cho ${success}/${total} pages
+            ${success < total ? '<br>⚠️ Một số pages có lỗi, kiểm tra token' : ''}
         </div>
-    `).join('')}
-`;
+        ${results.map(result => `
+            <div style="margin-top: 8px; font-size: 12px;">
+                <strong>${result.page_id}:</strong> 
+                ${result.link ? `<a href="${result.link}" target="_blank">✅ Xem bài đăng</a>` : '❌ ' + (result.error || 'Lỗi không xác định')}
+            </div>
+        `).join('')}
+      `;
       
       // Cập nhật thống kê
       loadDailyStats();
@@ -1511,7 +1512,9 @@ status.innerHTML = `
           $('#reply_text').value = '';
           $('#reply_image').value = '';
           // Reload messages
-          loadConversationMessages(window.currentConversationIndex);
+          if (window.currentConversationIndex !== undefined) {
+            loadConversationMessages(window.currentConversationIndex);
+          }
         }
         
       } catch (error) {
@@ -2022,6 +2025,7 @@ def api_pages_post():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     """API upload file"""
@@ -2302,7 +2306,8 @@ def internal_error(error):
 @app.errorhandler(Exception)
 def handle_exception(e):
     return jsonify({"error": f"Lỗi hệ thống: {str(e)}"}), 500
-    @app.route("/api/admin/test_tokens", methods=["POST"])
+
+@app.route("/api/admin/test_tokens", methods=["POST"])
 def api_test_tokens():
     """API test tokens - CHỨC NĂNG MỚI"""
     try:
