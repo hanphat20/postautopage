@@ -709,7 +709,7 @@ INDEX_HTML = r"""<!doctype html>
               <button class="btn" id="btn_open_page" disabled>📄 Mở trang</button>
             </div>
             <div class="muted">
-              ⚠️ API thường không gửi được tin nhắn. Dùng link này để trả lời thủ công trên Facebook.
+              ⚠️ API thường không gửi được tin nhắn. Dùng link này để trả lời thủ công trên Facebook Business Suite.
             </div>
           </div>
 
@@ -1214,6 +1214,9 @@ Ví dụ:
         
         const sendersText = conv.senders_text || conv.senders_list?.join(', ') || 'Không có thông tin';
         
+        // SỬA LINK Ở ĐÂY - DÙNG BUSINESS SUITE
+        const businessLink = `https://business.facebook.com/latest/inbox/all/${conv.id}`;
+        
         return `
             <div class="conv-item" data-index="${index}">
                 <div style="flex:1">
@@ -1225,7 +1228,7 @@ Ví dụ:
                     <div class="conv-meta">${time}</div>
                     ${unreadBadge}
                     <div class="conv-meta" style="margin-top:4px;">
-                        <small><a href="https://www.facebook.com/messages/t/${conv.id}" target="_blank" onclick="event.stopPropagation()">🔗 Facebook</a></small>
+                        <small><a href="${businessLink}" target="_blank" onclick="event.stopPropagation()">🔗 Business Suite</a></small>
                     </div>
                 </div>
             </div>
@@ -1278,16 +1281,16 @@ Ví dụ:
     }
   }
 
-  // Update Facebook links
+  // Update Facebook links - ĐÃ SỬA DÙNG BUSINESS SUITE
   function updateFacebookLinks(conv, pageId) {
     const conversationBtn = $('#btn_open_conversation');
     const pageBtn = $('#btn_open_page');
     const status = $('#facebook_links_status');
     
     if (conv && pageId) {
-        // Tạo link Facebook
-        const conversationLink = `https://www.facebook.com/messages/t/${conv.id}`;
-        const pageLink = `https://www.facebook.com/${pageId}`;
+        // SỬA LINK Ở ĐÂY - DÙNG BUSINESS SUITE
+        const conversationLink = `https://business.facebook.com/latest/inbox/all/${conv.id}`;
+        const pageLink = `https://facebook.com/${pageId}`;
         
         // Cập nhật link cho buttons
         conversationBtn.onclick = () => window.open(conversationLink, '_blank');
@@ -1297,7 +1300,7 @@ Ví dụ:
         conversationBtn.disabled = false;
         pageBtn.disabled = false;
         
-        status.textContent = '✅ Link sẵn sàng - Click để mở trên Facebook';
+        status.textContent = '✅ Link sẵn sàng - Click để mở trong Business Suite';
         
         // Lưu thông tin hiện tại
         currentConversation = conv;
@@ -1984,6 +1987,10 @@ def api_inbox_conversations():
                     # Lấy tên page từ thông tin đã lưu
                     page_name = f"Page {pid}"
                     conv["page_name"] = page_name
+                    
+                    # THÊM BUSINESS SUITE LINK
+                    conv["business_suite_link"] = f"https://business.facebook.com/latest/inbox/all/{conv['id']}"
+                    
                     conversations.append(conv)
                     
             except Exception as e:
@@ -2586,7 +2593,7 @@ if __name__ == "__main__":
     print("   • Lưu template vào local storage")
     print("=" * 60)
     print("💬 Inbox Features:")
-    print("   • Link trực tiếp đến Facebook Messenger")
+    print("   • Link trực tiếp đến Facebook Business Suite")
     print("   • Quick reply templates")
     print("   • Mở profile người gửi")
     print("   • Hiển thị ảnh đính kèm")
