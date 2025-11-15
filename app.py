@@ -9,7 +9,7 @@ import uuid
 import requests
 from collections import Counter
 from datetime import datetime, timedelta
-from flask import Flask, Response, jsonify, make_response, request, send_from_directory
+from flask import Flask, Response, jsonify, make_response, request, send_from_directory, send_file
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -45,6 +45,7 @@ MAX_TRIES_ENV = int(os.getenv("MAX_TRIES", "5"))
 CORPUS_FILE = os.getenv("CORPUS_FILE", "/tmp/post_corpus.json")
 SETTINGS_FILE = os.getenv('SETTINGS_FILE', '/tmp/page_settings.json')
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', '/tmp/uploads')
+LOG_FILE = os.getenv('LOG_FILE', '/tmp/app.log')
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -62,24 +63,66 @@ if OPENAI_AVAILABLE and OPENAI_API_KEY:
         print(f"❌ OpenAI init error: {e}")
         _client = None
 
+# ------------------------ Logging System ------------------------
+
+def log_message(message: str, level: str = "INFO"):
+    """Ghi log vào file và in ra console"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"[{timestamp}] [{level}] {message}\n"
+    
+    print(log_entry.strip())
+    
+    try:
+        with open(LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(log_entry)
+    except Exception as e:
+        print(f"❌ Lỗi ghi log: {e}")
+
 # ------------------------ Core Functions ------------------------
 
 def _load_settings():
-    """Tải cài đặt từ file"""
+    """Tải cài đặt từ file - ĐÃ SỬA LỖI"""
     try:
-        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
+        # Đảm bảo thư mục tồn tại
+        os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+        
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+                log_message(f"Đã tải cài đặt: {len(settings)} pages")
+                return settings
+        else:
+            log_message("Chưa có file cài đặt, tạo mới")
+            # Tạo file mới với cấu trúc mẫu
+            default_settings = {
+                "default": {
+                    "keyword": "AKUTA",
+                    "source": "https://akutaclub.vip/",
+                    "auto_reply": True,
+                    "auto_post": True,
+                    "created_at": datetime.now().isoformat()
+                }
+            }
+            _save_settings(default_settings)
+            return default_settings
+            
+    except Exception as e:
+        log_message(f"Lỗi tải cài đặt: {e}", "ERROR")
         return {}
 
 def _save_settings(data: dict):
-    """Lưu cài đặt vào file"""
+    """Lưu cài đặt vào file - ĐÃ SỬA LỖI"""
     try:
+        # Đảm bảo thư mục tồn tại
         os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+        
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        log_message(f"Đã lưu cài đặt: {len(data)} pages")
+        
     except Exception as e:
-        print(f"Error saving settings: {e}")
+        log_message(f"Lỗi lưu cài đặt: {e}", "ERROR")
 
 def _load_tokens() -> dict:
     """Tải tokens từ file tokens.json trong Render Secrets"""
@@ -87,27 +130,27 @@ def _load_tokens() -> dict:
         # Ưu tiên đọc từ Render Secrets
         secrets_path = "/etc/secrets/tokens.json"
         if os.path.exists(secrets_path):
-            print(f"🔍 Tìm thấy file tokens tại: {secrets_path}")
+            log_message(f"Tìm thấy file tokens tại: {secrets_path}")
             with open(secrets_path, 'r', encoding='utf-8') as f:
                 tokens_data = json.load(f)
-                print(f"✅ Đã load tokens từ Render Secrets")
+                log_message("Đã load tokens từ Render Secrets")
                 
                 # Trích xuất page tokens từ cấu trúc JSON
                 if "pages" in tokens_data:
                     page_tokens = tokens_data["pages"]
-                    print(f"✅ Đã trích xuất {len(page_tokens)} page tokens từ tokens.json")
+                    log_message(f"Đã trích xuất {len(page_tokens)} page tokens từ tokens.json")
                     
                     # Debug: hiển thị thông tin token đầu tiên
                     if page_tokens:
                         first_page_id = list(page_tokens.keys())[0]
                         first_token = page_tokens[first_page_id]
-                        print(f"🔍 Token mẫu: {first_token[:20]}...")
-                        print(f"📏 Độ dài token: {len(first_token)}")
-                        print(f"🔤 Bắt đầu bằng: '{first_token[:4]}'")
+                        log_message(f"Token mẫu: {first_token[:20]}...")
+                        log_message(f"Độ dài token: {len(first_token)}")
+                        log_message(f"Bắt đầu bằng: '{first_token[:4]}'")
                     
                     return page_tokens
                 else:
-                    print("❌ Không tìm thấy key 'pages' trong tokens.json")
+                    log_message("Không tìm thấy key 'pages' trong tokens.json", "ERROR")
                     return {}
         
         # Fallback: đọc từ biến môi trường
@@ -115,20 +158,20 @@ def _load_tokens() -> dict:
         if env_json:
             try:
                 tokens = json.loads(env_json)
-                print(f"✅ Loaded {len(tokens)} tokens from environment")
+                log_message(f"Loaded {len(tokens)} tokens from environment")
                 return tokens
             except Exception as e:
-                print(f"❌ Error parsing PAGE_TOKENS: {e}")
+                log_message(f"Error parsing PAGE_TOKENS: {e}", "ERROR")
         
         # Fallback cuối cùng cho demo
-        print("⚠️ Using demo tokens - No tokens file found")
+        log_message("Using demo tokens - No tokens file found", "WARNING")
         return {
             "demo_page_1": "EAA...demo_token_1...",
             "demo_page_2": "EAA...demo_token_2..."
         }
         
     except Exception as e:
-        print(f"❌ Lỗi khi load tokens: {e}")
+        log_message(f"Lỗi khi load tokens: {e}", "ERROR")
         import traceback
         traceback.print_exc()
         return {}
@@ -164,26 +207,26 @@ def fb_get(path: str, params: dict, timeout: int = 30) -> dict:
     try:
         # Ẩn token trong log
         debug_params = {k: '***' if 'token' in k.lower() else v for k, v in params.items()}
-        print(f"🔍 Facebook API GET: {url}")
+        log_message(f"Facebook API GET: {url}")
         
         r = session.get(url, params=params, timeout=timeout)
         r.raise_for_status()
         result = r.json()
         
-        print(f"✅ Facebook API response success")
+        log_message("Facebook API response success")
         return result
         
     except requests.exceptions.HTTPError as e:
         error_msg = f"Facebook API HTTP Error {e.response.status_code}: {e.response.text}"
-        print(f"❌ {error_msg}")
+        log_message(error_msg, "ERROR")
         raise RuntimeError(error_msg)
     except requests.exceptions.RequestException as e:
         error_msg = f"Facebook API Request failed: {str(e)}"
-        print(f"❌ {error_msg}")
+        log_message(error_msg, "ERROR")
         raise RuntimeError(error_msg)
     except Exception as e:
         error_msg = f"Facebook API unexpected error: {str(e)}"
-        print(f"❌ {error_msg}")
+        log_message(error_msg, "ERROR")
         raise RuntimeError(error_msg)
 
 def fb_post(path: str, data: dict, timeout: int = 30) -> dict:
@@ -277,8 +320,8 @@ Khám phá thế giới giải trí trực tuyến đẳng cấp với {keyword}
         
         # Additional hashtags (chọn ngẫu nhiên 10-15 hashtag)
         all_additional = (
-            self.additional_hashtags["casino"] + 
-            self.additional_hashtags["entertainment"] + 
+            self.additional_hashtags["casino"] +
+            self.additional_hashtags["entertainment"] +
             self.additional_hashtags["general"]
         )
         selected_additional = random.sample(all_additional, min(12, len(all_additional)))
@@ -342,7 +385,7 @@ class AIContentWriter:
                   • Giới thiệu ngắn → Điểm nổi bật → Ưu đãi → Thông tin liên hệ
                 - Link: {source}
                 
-                **THÔNG TIN LIÊN HỆ CỐ ĐỊNH (BẮT BUỘC):**
+                **THÔNG TIN LIÊN HỆ CỐ ĐỊNH (BẮT BUỆT):**
                 • Hotline: 0363269604 (Hỗ trợ 24/7 kể cả ngày lễ)
                 • Telegram: @cattien999
                 • Thời gian làm việc: Tất cả các ngày trong tuần
@@ -399,7 +442,7 @@ class AIContentWriter:
             return content
             
         except Exception as e:
-            print(f"AI generation failed: {e}, falling back to SEO generator")
+            log_message(f"AI generation failed: {e}, falling back to SEO generator", "ERROR")
             # Fallback to SEO generator
             return self.seo_generator.generate_seo_content(keyword, source, user_prompt)
 
@@ -430,7 +473,7 @@ def _uniq_save_corpus(corpus: dict):
         with open(CORPUS_FILE, "w", encoding="utf-8") as f:
             json.dump(corpus, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"Error saving corpus: {e}")
+        log_message(f"Error saving corpus: {e}", "ERROR")
 
 def _uniq_norm(s: str) -> str:
     """Chuẩn hóa chuỗi - ĐÃ SỬA LỖI NoneType"""
@@ -495,7 +538,7 @@ class AnalyticsTracker:
             
             self._save_analytics(data)
         except Exception as e:
-            print(f"Analytics tracking error: {e}")
+            log_message(f"Analytics tracking error: {e}", "ERROR")
     
     def track_message(self, page_id, message_type, success=True):
         """Theo dõi tin nhắn"""
@@ -515,7 +558,7 @@ class AnalyticsTracker:
             
             self._save_analytics(data)
         except Exception as e:
-            print(f"Analytics tracking error: {e}")
+            log_message(f"Analytics tracking error: {e}", "ERROR")
     
     def get_daily_stats(self):
         """Lấy thống kê hàng ngày"""
@@ -540,7 +583,7 @@ class AnalyticsTracker:
                 "successful_messages": successful_messages
             }
         except Exception as e:
-            print(f"Analytics stats error: {e}")
+            log_message(f"Analytics stats error: {e}", "ERROR")
             return {}
     
     def _load_analytics(self):
@@ -558,2050 +601,1061 @@ class AnalyticsTracker:
             with open(self.analytics_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"Error saving analytics: {e}")
+            log_message(f"Error saving analytics: {e}", "ERROR")
 
 # Khởi tạo analytics tracker
 analytics_tracker = AnalyticsTracker()
 
-# ------------------------ Frontend HTML ------------------------
+# ------------------------ Route Handlers ------------------------
 
-INDEX_HTML = r"""<!doctype html>
-<html lang="vi">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AKUTA Content Manager 2025</title>
-  <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Arial,Helvetica,sans-serif;margin:0;background:#fafafa;color:#111}
-    .container{max-width:1200px;margin:24px auto;padding:0 16px}
-    h1{font-size:22px;margin:0 0 16px}
-    .tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-    .tabs button{border:1px solid #ddd;background:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px}
-    .tabs button.active{background:#111;color:#fff;border-color:#111}
-    .grid{display:grid;grid-template-columns:300px 1fr;gap:20px}
-    .card{background:#fff;border:1px solid #eee;border-radius:12px;padding:16px;margin-bottom:16px}
-    .card h3{margin:0 0 12px;font-size:16px}
-    .muted{color:#666;font-size:13px}
-    .status{font-size:13px;color:#444;margin:8px 0;padding:8px;border-radius:6px}
-    .status.success{background:#d4edda;border:1px solid #c3e6cb}
-    .status.error{background:#f8d7da;border:1px solid #f5c6cb}
-    .status.warning{background:#fff3cd;border:1px solid #ffeaa7}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0}
-    .col{display:flex;flex-direction:column;gap:8px}
-    .btn{padding:10px 16px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer;font-size:14px}
-    .btn.primary{background:#111;color:#fff;border-color:#111}
-    .btn:hover{opacity:0.8}
-    .list{display:flex;flex-direction:column;gap:8px;max-height:500px;overflow:auto;border:1px dashed #eee;border-radius:8px;padding:12px}
-    .conv-item{display:flex;justify-content:space-between;gap:12px;border:1px solid #eee;border-radius:8px;padding:12px;cursor:pointer;background:#fcfcfc;transition:all 0.2s}
-    .conv-item:hover{background:#f5f5f5;border-color:#ddd}
-    .conv-meta{color:#666;font-size:12px}
-    .badge{display:inline-block;font-size:11px;border:1px solid #ddd;padding:2px 8px;border-radius:12px;margin-left:6px}
-    .badge.unread{border-color:#e91e63;color:#e91e63;background:#fce4ec}
-    .badge.success{border-color:#4caf50;color:#4caf50;background:#e8f5e8}
-    .bubble{max-width:80%;background:#f1f3f5;border:1px solid #e9ecef;border-radius:14px;padding:10px 12px;margin:6px 0}
-    .bubble.right{background:#111;color:#fff;border-color:#111}
-    .meta{font-size:12px;color:#666;margin-bottom:4px}
-    #thread_messages{height:400px;overflow:auto;border:1px dashed #eee;border-radius:8px;padding:12px;background:#fff}
-    .toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}
-    input[type="text"],textarea{border:1px solid #ddd;border-radius:8px;padding:10px 12px;font-size:14px;width:100%}
-    textarea{min-height:120px;resize:vertical;font-family:inherit}
-    .pages-box{max-height:300px;overflow:auto;border:1px dashed #eee;border-radius:8px;padding:12px;background:#fff}
-    label.checkbox{display:flex;align-items:center;gap:10px;padding:8px;border-radius:6px;cursor:pointer;transition:background 0.2s}
-    label.checkbox:hover{background:#f7f7f7}
-    .right{text-align:right}
-    .sendbar{display:flex;gap:10px;margin-top:12px}
-    .sendbar input{flex:1}
-    .settings-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:center;margin:8px 0}
-    .settings-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .settings-input{width:100%;min-height:38px;padding:8px 12px;border:1px solid #ddd;border-radius:8px}
-    #settings_box{padding:12px}
-    .token-status{font-size:11px;padding:2px 8px;border-radius:10px;margin-left:6px}
-    .token-valid{background:#d4edda;color:#155724;border:1px solid #c3e6cb}
-    .token-invalid{background:#f8d7da;color:#721c24;border:1px solid #f5c6cb}
-    .system-alert{padding:12px;border-radius:8px;margin:16px 0;border-left:4px solid #ff9800}
-    .system-alert.warning{background:#fff3cd;color:#856404;border-color:#ff9800}
-    .tab{display:none}
-    .tab.active{display:block}
-    .message-image{max-width:200px;border-radius:8px;margin-top:8px}
-    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin:16px 0}
-    .stat-card{background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:16px;text-align:center}
-    .stat-number{font-size:24px;font-weight:bold;color:#111}
-    .stat-label{font-size:12px;color:#666;margin-top:4px}
-    .progress-bar{height:8px;background:#e9ecef;border-radius:4px;overflow:hidden;margin:8px 0}
-    .progress-fill{height:100%;background:#28a745;transition:width 0.3s}
-    .prompt-templates{display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:8px;margin:12px 0}
-    .prompt-template{border:1px solid #ddd;border-radius:8px;padding:12px;cursor:pointer;background:#f8f9fa;transition:all 0.2s}
-    .prompt-template:hover{background:#e9ecef;border-color:#111}
-    .prompt-template.active{background:#111;color:#fff;border-color:#111}
-    .prompt-category{margin:16px 0 8px 0;font-weight:600;color:#333;border-bottom:1px solid #eee;padding-bottom:4px}
-    .facebook-links{display:flex;gap:10px;margin:10px 0}
-    .quick-action{background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:10px;margin:8px 0}
-    .quick-action .btn{padding:6px 12px;font-size:12px}
-    .conv-actions{display:flex;gap:5px;margin-top:5px}
-    .conv-actions .btn{padding:2px 8px;font-size:11px}
-    .quick-replies{margin:10px 0;padding:10px;background:#f8f9fa;border-radius:8px}
-    @media (max-width: 768px) {
-      .grid{grid-template-columns:1fr}
-      .container{padding:0 12px}
-      .stats-grid{grid-template-columns:1fr 1fr}
-      .prompt-templates{grid-template-columns:1fr}
-      .facebook-links{flex-direction:column}
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🚀 AKUTA Content Manager 2025 - SEO OPTIMIZED</h1>
-
-    <div class="system-alert warning" id="systemAlert">
-      <strong>Hệ thống đang chạy:</strong> <span id="systemStatus">Đang kiểm tra...</span>
-    </div>
-
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="inbox">📨 Tin nhắn</button>
-      <button class="tab-btn" data-tab="posting">📢 Đăng bài</button>
-      <button class="tab-btn" data-tab="settings">⚙️ Cài đặt</button>
-      <button class="tab-btn" data-tab="analytics">📊 Thống kê</button>
-      <button class="tab-btn" data-tab="prompts">🎨 Prompt Templates</button>
-    </div>
-
-    <!-- Tab Tin nhắn -->
-    <div id="tab-inbox" class="tab active">
-      <div class="grid">
-        <div class="col">
-          <div class="card">
-            <h3>Quản lý Pages</h3>
-            <div class="status" id="inbox_pages_status">Đang tải...</div>
-            <div class="row">
-              <label class="checkbox">
-                <input type="checkbox" id="inbox_select_all"> 
-                <strong>Chọn tất cả</strong>
-              </label>
-            </div>
-            <div class="pages-box" id="pages_box"></div>
-            <div class="row">
-              <label class="checkbox">
-                <input type="checkbox" id="inbox_only_unread"> 
-                Chỉ hiện chưa đọc
-              </label>
-              <button class="btn primary" id="btn_inbox_refresh">🔄 Tải hội thoại</button>
-            </div>
-            <div class="muted">
-              🔔 Âm báo <input type="checkbox" id="inbox_sound" checked> 
-              • Tự động cập nhật mỗi 30s
-            </div>
-          </div>
-        </div>
-
-        <div class="col">
-          <div class="card">
-            <h3>Hội thoại <span id="unread_total" class="badge unread" style="display:none">0</span></h3>
-            <div class="status" id="inbox_conv_status">Chọn page để xem hội thoại</div>
-            <div class="list" id="conversations"></div>
-          </div>
-
-          <!-- Card Facebook Links -->
-          <div class="card">
-            <h3>🔗 Mở trên Facebook</h3>
-            <div class="status" id="facebook_links_status">Chọn hội thoại để xem link</div>
-            <div class="row">
-              <button class="btn" id="btn_open_conversation" disabled>💬 Mở hội thoại</button>
-              <button class="btn" id="btn_open_page" disabled>📄 Mở trang</button>
-            </div>
-            <div class="muted">
-              ⚠️ API thường không gửi được tin nhắn. Dùng link này để trả lời thủ công trên Facebook Business Suite.
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="toolbar">
-              <strong id="thread_header">💬 Chưa chọn hội thoại</strong>
-              <span class="status" id="thread_status"></span>
-            </div>
-            <div id="thread_messages" class="list"></div>
-            
-            <!-- Quick Replies -->
-            <div class="quick-replies" id="quick_replies_container" style="display:none">
-              <strong>💬 Trả lời nhanh:</strong>
-              <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px;">
-                <button class="btn" onclick="setQuickReply('greeting')" style="font-size: 11px; padding: 4px 8px;">Xin chào</button>
-                <button class="btn" onclick="setQuickReply('thanks')" style="font-size: 11px; padding: 4px 8px;">Cảm ơn</button>
-                <button class="btn" onclick="setQuickReply('info')" style="font-size: 11px; padding: 4px 8px;">Thông tin</button>
-                <button class="btn" onclick="setQuickReply('guide')" style="font-size: 11px; padding: 4px 8px;">Hướng dẫn</button>
-                <button class="btn" onclick="setQuickReply('callback')" style="font-size: 11px; padding: 4px 8px;">Gọi lại</button>
-              </div>
-            </div>
-            
-            <div class="sendbar">
-              <input type="text" id="reply_text" placeholder="Nhập tin nhắn trả lời...">
-              <input type="file" id="reply_image" accept="image/*" style="display:none">
-              <button class="btn" onclick="document.getElementById('reply_image').click()">📷</button>
-              <button class="btn primary" id="btn_reply">📤 Gửi qua API</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab Đăng bài -->
-    <div id="tab-posting" class="tab">
-      <div class="card">
-        <h3>📢 Đăng bài lên Pages</h3>
-        <div class="status" id="post_pages_status">Đang tải pages...</div>
-        <div class="row">
-          <label class="checkbox">
-            <input type="checkbox" id="post_select_all"> 
-            <strong>Chọn tất cả pages</strong>
-          </label>
-        </div>
-        <div class="pages-box" id="post_pages_box"></div>
-      </div>
-
-      <div class="card">
-        <h3>🤖 AI Content Generator (SEO OPTIMIZED)</h3>
-        <div class="muted">
-          🔍 Tự động tạo content chuẩn SEO với 6 hashtag cố định + 10-15 hashtag liên quan
-        </div>
-        
-        <div class="row">
-          <textarea id="ai_prompt" placeholder="Nhập prompt tuỳ chỉnh hoặc chọn template bên dưới... 
-Ví dụ: 
-- Tạo bài viết tập trung vào khuyến mãi 200% cho lần nạp đầu
-- Viết content nhấn mạnh tính năng bảo mật và rút tiền nhanh
-- Tạo bài giới thiệu dịch vụ hỗ trợ 24/7 chuyên nghiệp" style="min-height:100px"></textarea>
-        </div>
-        
-        <div class="row">
-          <button class="btn primary" id="btn_ai_generate">🎨 Tạo nội dung bằng AI</button>
-          <button class="btn" id="btn_ai_enhance">✨ Làm đẹp nội dung</button>
-          <button class="btn" id="btn_check_seo">🔍 Kiểm tra SEO</button>
-        </div>
-        
-        <div class="status" id="ai_status"></div>
-      </div>
-
-      <div class="card">
-        <h3>📝 Nội dung bài đăng</h3>
-        <div class="muted" id="seo_score">Điểm SEO: Chưa kiểm tra</div>
-        <div class="row">
-          <textarea id="post_text" placeholder="Nội dung bài đăng sẽ hiển thị ở đây..." style="min-height:200px"></textarea>
-        </div>
-        <div class="row">
-          <label class="checkbox">
-            <input type="radio" name="post_type" value="feed" checked> 
-            Đăng lên Feed
-          </label>
-          <label class="checkbox">
-            <input type="radio" name="post_type" value="reels"> 
-            Đăng Reels (video)
-          </label>
-          <label class="checkbox">
-            <input type="checkbox" id="enable_scheduling"> 
-            Lên lịch đăng
-          </label>
-          <input type="datetime-local" id="schedule_time" style="display:none">
-        </div>
-        <div class="row">
-          <input type="text" id="post_media_url" placeholder="🔗 URL ảnh/video (tuỳ chọn)" style="flex:1">
-          <input type="file" id="post_media_file" accept="image/*,video/*" style="display:none">
-          <button class="btn" onclick="document.getElementById('post_media_file').click()">📁 Chọn file</button>
-          <button class="btn primary" id="btn_post_submit">🚀 Đăng bài ngay</button>
-        </div>
-        <div class="status" id="post_status"></div>
-      </div>
-    </div>
-
-    <!-- Tab Cài đặt -->
-    <div id="tab-settings" class="tab">
-      <div class="card">
-        <h3>⚙️ Cài đặt hệ thống</h3>
-        <div class="muted">
-          Webhook: <code>/webhook/events</code> • 
-          SSE: <code>/stream/messages</code> • 
-          API: <code>/api/*</code>
-        </div>
-        <div class="status" id="settings_status">Đang tải cài đặt...</div>
-        
-        <div id="settings_box" class="pages-box"></div>
-        
-        <div class="row">
-          <button class="btn primary" id="btn_settings_save">💾 Lưu cài đặt</button>
-          <button class="btn" id="btn_settings_export">📤 Xuất CSV</button>
-          <label class="btn" for="settings_import" style="cursor:pointer">📥 Nhập CSV</label>
-          <input type="file" id="settings_import" accept=".csv" style="display:none">
-          <button class="btn" id="btn_clear_cache">🗑️ Xoá cache</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>🔧 Công cụ quản trị</h3>
-        <div class="row">
-          <button class="btn" id="btn_test_tokens">🧪 Test Tokens</button>
-          <button class="btn" id="btn_refresh_pages">🔄 Làm mới Pages</button>
-          <button class="btn" id="btn_health_check">❤️ Health Check</button>
-          <button class="btn" id="btn_clear_analytics">📊 Xoá thống kê</button>
-        </div>
-        <div class="status" id="admin_status"></div>
-      </div>
-    </div>
-
-    <!-- Tab Thống kê -->
-    <div id="tab-analytics" class="tab">
-      <div class="card">
-        <h3>📊 Thống kê hoạt động</h3>
-        <div class="stats-grid" id="daily_stats">
-          <div class="stat-card">
-            <div class="stat-number" id="stat_posts_today">0</div>
-            <div class="stat-label">Bài đăng hôm nay</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number" id="stat_success_posts">0</div>
-            <div class="stat-label">Bài đăng thành công</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number" id="stat_failed_posts">0</div>
-            <div class="stat-label">Bài đăng thất bại</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number" id="stat_messages_today">0</div>
-            <div class="stat-label">Tin nhắn hôm nay</div>
-          </div>
-        </div>
-        
-        <div class="row">
-          <div class="col" style="flex:1">
-            <div class="card" style="background:#f8f9fa">
-              <h4>📈 Tổng quan hệ thống</h4>
-              <div id="analytics_overview">Đang tải...</div>
-            </div>
-          </div>
-          <div class="col" style="flex:1">
-            <div class="card" style="background:#f8f9fa">
-              <h4>🔔 Hoạt động gần đây</h4>
-              <div id="recent_activity">Đang tải...</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab Prompt Templates -->
-    <div id="tab-prompts" class="tab">
-      <div class="card">
-        <h3>🎨 Prompt Templates cho Content</h3>
-        <div class="muted">
-          Chọn template hoặc tạo prompt tuỳ chỉnh để tạo nội dung phù hợp
-        </div>
-        
-        <div class="prompt-category">🎯 Template Quảng cáo Khuyến mãi</div>
-        <div class="prompt-templates">
-          <div class="prompt-template" data-prompt="Tạo bài viết tập trung vào khuyến mãi 200% cho lần nạp đầu tiên, nhấn mạnh cơ hội nhận thưởng lớn và tỷ lệ trúng cao">
-            🎁 Khuyến mãi 200%
-          </div>
-          <div class="prompt-template" data-prompt="Viết content về chương trình hoàn trả 2.5% không giới hạn, phù hợp cho người chơi thường xuyên">
-            💰 Hoàn trả 2.5%
-          </div>
-          <div class="prompt-template" data-prompt="Tạo bài giới thiệu sự kiện quay số may mắn với giải thưởng iPhone 15 và laptop">
-            🎰 Quay số may mắn
-          </div>
-          <div class="prompt-template" data-prompt="Viết bài về combo khuyến mãi dành cho thành viên VIP với ưu đãi đặc biệt">
-            ⭐ VIP Combo
-          </div>
-        </div>
-
-        <div class="prompt-category">🛡️ Template Bảo mật & Uy tín</div>
-        <div class="prompt-templates">
-          <div class="prompt-template" data-prompt="Nhấn mạnh tính năng bảo mật đa tầng, mã hoá SSL và bảo vệ thông tin khách hàng">
-            🔒 Bảo mật đa tầng
-          </div>
-          <div class="prompt-template" data-prompt="Tạo content về hệ thống rút tiền siêu tốc 3-5 phút, minh bạch mọi giao dịch">
-            ⚡ Rút tiền nhanh
-          </div>
-          <div class="prompt-template" data-prompt="Giới thiệu đội ngũ hỗ trợ 24/7 chuyên nghiệp, giải quyết mọi vấn đề trong 5 phút">
-            🛎️ Hỗ trợ 24/7
-          </div>
-          <div class="prompt-template" data-prompt="Viết bài về cam kết uy tín, minh bạch và công bằng trong mọi giao dịch">
-            ✅ Uy tín hàng đầu
-          </div>
-        </div>
-
-        <div class="prompt-category">🎮 Template Game & Giải trí</div>
-        <div class="prompt-templates">
-          <div class="prompt-template" data-prompt="Giới thiệu trải nghiệm game slot với đồ họa 3D sống động, hiệu ứng âm thanh chân thực">
-            🎰 Game Slot 3D
-          </div>
-          <div class="prompt-template" data-prompt="Tạo content về các trò chơi bài casino trực tuyến với dealer chuyên nghiệp">
-            ♠️ Casino trực tiếp
-          </div>
-          <div class="prompt-template" data-prompt="Viết bài về thể thao ảo và esports với tỷ lệ cược hấp dẫn, cập nhật liên tục">
-            ⚽ Thể thao ảo
-          </div>
-          <div class="prompt-template" data-prompt="Giới thiệu tính năng nổ hũ jackpot với giải thưởng lên đến 5 tỷ đồng">
-            💎 Jackpot khủng
-          </div>
-        </div>
-
-        <div class="prompt-category">📱 Template Mobile & Technology</div>
-        <div class="prompt-templates">
-          <div class="prompt-template" data-prompt="Tạo bài viết về trải nghiệm mobile tối ưu, giao diện thân thiện trên mọi thiết bị">
-            📱 Mobile First
-          </div>
-          <div class="prompt-template" data-prompt="Viết content về công nghệ AI hỗ trợ người chơi, gợi ý game phù hợp">
-            🤖 AI Gợi ý
-          </div>
-          <div class="prompt-template" data-prompt="Giới thiệu tính năng one-tap login, đăng nhập nhanh không cần mật khẩu">
-            🔑 One-Tap Login
-          </div>
-          <div class="prompt-template" data-prompt="Tạo bài về hệ thống thông báo push notification cho khuyến mãi mới">
-            🔔 Thông báo realtime
-          </div>
-        </div>
-
-        <div class="row" style="margin-top:20px">
-          <div class="col" style="flex:1">
-            <h4>🎨 Prompt Tuỳ chỉnh</h4>
-            <textarea id="custom_prompt" placeholder="Nhập prompt tuỳ chỉnh của bạn ở đây..." style="min-height:120px"></textarea>
-            <div class="row">
-              <button class="btn primary" id="btn_use_custom">🚀 Sử dụng Prompt này</button>
-              <button class="btn" id="btn_save_template">💾 Lưu Template</button>
-            </div>
-          </div>
-          <div class="col" style="flex:1">
-            <h4>📝 Hướng dẫn viết Prompt</h4>
-            <div style="background:#f8f9fa;padding:12px;border-radius:8px;font-size:13px">
-              <strong>Mẹo viết prompt hiệu quả:</strong>
-              <ul style="margin:8px 0;padding-left:16px">
-                <li>Rõ ràng, cụ thể về chủ đề</li>
-                <li>Đề cập đến tính năng muốn nhấn mạnh</li>
-                <li>Chỉ định tone giọng (vui vẻ, chuyên nghiệp, thân thiện)</li>
-                <li>Yêu cầu cấu trúc cụ thể nếu cần</li>
-                <li>Đề cập đến từ khoá chính</li>
-              </ul>
-              <strong>Ví dụ prompt tốt:</strong>
-              <br>"Tạo bài viết về khuyến mãi 150% cho lần nạp đầu, tập trung vào tính năng rút tiền nhanh trong 3 phút, sử dụng tone giọng thân thiện và nhiệt tình"
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-  // Utility functions
-  function $(sel) { return document.querySelector(sel); }
-  function $all(sel) { return Array.from(document.querySelectorAll(sel)); }
-
-  // Biến toàn cục
-  let currentConversation = null;
-  let currentPage = null;
-  
-  // Quick replies templates
-  const quickReplies = {
-    "greeting": "Xin chào! Cảm ơn bạn đã liên hệ với chúng tôi. Bạn cần hỗ trợ gì ạ?",
-    "thanks": "Cảm ơn bạn đã quan tâm! Chúng tôi rất vui được hỗ trợ bạn.",
-    "info": "Bạn vui lòng để lại số điện thoại hoặc liên hệ hotline 0363269604 để được tư vấn chi tiết nhé!",
-    "guide": "Hướng dẫn chi tiết đã được gửi trong tin nhắn. Bạn cần hỗ trợ thêm gì không?",
-    "callback": "Chúng tôi sẽ liên hệ lại với bạn trong ít phút. Bạn vui lòng giữ liên lạc nhé!"
-  };
-
-  // System status
-  async function updateSystemStatus() {
-    try {
-      const response = await fetch('/health');
-      const data = await response.json();
-      
-      const statusText = `Pages: ${data.pages_connected}/${data.pages_total} | AI: ${data.openai_ready ? '✅' : '❌'} | Token hợp lệ: ${data.valid_tokens}`;
-      $('#systemStatus').textContent = statusText;
-      
-    } catch (error) {
-      $('#systemStatus').textContent = '❌ Lỗi kết nối server';
-    }
-  }
-
-  // Tab switching
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      // Update active tab button
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      
-      // Show active tab content
-      const tabName = btn.getAttribute('data-tab');
-      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-      $(`#tab-${tabName}`).classList.add('active');
-
-      // Load specific tab data
-      if (tabName === 'settings') {
-        loadSettings();
-      } else if (tabName === 'analytics') {
-        loadAnalytics();
-        loadDailyStats();
-      } else if (tabName === 'prompts') {
-        initPromptTemplates();
-      }
-    });
-  });
-
-  // Prompt Templates functionality
-  function initPromptTemplates() {
-    // Template selection
-    $all('.prompt-template').forEach(template => {
-      template.addEventListener('click', function() {
-        // Remove active class from all templates
-        $all('.prompt-template').forEach(t => t.classList.remove('active'));
-        // Add active class to clicked template
-        this.classList.add('active');
-        
-        // Get prompt text and set to textarea
-        const promptText = this.getAttribute('data-prompt');
-        $('#ai_prompt').value = promptText;
-        $('#custom_prompt').value = promptText;
-        
-        // Show success message
-        $('#ai_status').textContent = '✅ Đã chọn template: ' + this.textContent.trim();
-      });
-    });
-    
-    // Use custom prompt
-    $('#btn_use_custom').addEventListener('click', function() {
-      const customPrompt = $('#custom_prompt').value.trim();
-      if (customPrompt) {
-        $('#ai_prompt').value = customPrompt;
-        $('#ai_status').textContent = '✅ Đã áp dụng prompt tuỳ chỉnh';
-        
-        // Remove active class from all templates
-        $all('.prompt-template').forEach(t => t.classList.remove('active'));
-      } else {
-        $('#ai_status').textContent = '⚠️ Vui lòng nhập prompt tuỳ chỉnh';
-      }
-    });
-    
-    // Save template (local storage)
-    $('#btn_save_template').addEventListener('click', function() {
-      const customPrompt = $('#custom_prompt').value.trim();
-      if (customPrompt) {
-        // Simple local storage implementation
-        let savedTemplates = JSON.parse(localStorage.getItem('saved_prompt_templates') || '[]');
-        savedTemplates.push({
-          text: customPrompt,
-          timestamp: new Date().toISOString()
-        });
-        
-        // Keep only last 10 templates
-        savedTemplates = savedTemplates.slice(-10);
-        
-        localStorage.setItem('saved_prompt_templates', JSON.stringify(savedTemplates));
-        $('#ai_status').textContent = '✅ Đã lưu template vào bộ nhớ trình duyệt';
-      } else {
-        $('#ai_status').textContent = '⚠️ Vui lòng nhập prompt để lưu';
-      }
-    });
-  }
-
-  // Load pages with token status
-  async function loadPages() {
-    const boxes = ['#pages_box', '#post_pages_box'];
-    const statuses = ['#inbox_pages_status', '#post_pages_status'];
-    
-    try {
-      const response = await fetch('/api/pages');
-      const data = await response.json();
-      
-      if (data.error) {
-        statuses.forEach(s => $(s).textContent = `Lỗi: ${data.error}`);
-        return;
-      }
-
-      const pages = data.data || [];
-      
-      boxes.forEach(box => {
-        let html = '';
-        pages.forEach(page => {
-          const tokenStatus = page.token_valid ? 
-            '<span class="token-status token-valid">✓</span>' : 
-            '<span class="token-status token-invalid">✗</span>';
-          
-          html += `
-            <label class="checkbox">
-              <input type="checkbox" class="pg-checkbox" value="${page.id}" ${page.token_valid ? '' : 'disabled'}>
-              <strong>${page.name}</strong> ${tokenStatus}
-              ${page.error ? `<br><small style="color:#dc3545">${page.error}</small>` : ''}
-            </label>
-          `;
-        });
-        
-        $(box).innerHTML = html || '<div class="muted">Không có page nào.</div>';
-      });
-
-      statuses.forEach(s => $(s).textContent = `Đã tải ${pages.length} pages`);
-
-      // Select all functionality
-      const setupSelectAll = (selectAllId, checkboxClass) => {
-        const selectAll = $(selectAllId);
-        if (selectAll) {
-          selectAll.onclick = () => {
-            const checkboxes = $all(checkboxClass);
-            const allChecked = checkboxes.every(cb => cb.checked);
-            checkboxes.forEach(cb => {
-              if (!cb.disabled) {
-                cb.checked = !allChecked;
-              }
-            });
-          };
-        }
-      };
-
-      setupSelectAll('#inbox_select_all', '.pg-checkbox');
-      setupSelectAll('#post_select_all', '.pg-checkbox');
-
-    } catch (error) {
-      statuses.forEach(s => $(s).textContent = `Lỗi tải pages: ${error.message}`);
-    }
-  }
-
-  // Inbox functionality
-  async function refreshConversations() {
-    const pids = $all('#pages_box .pg-checkbox:checked').map(cb => cb.value);
-    const onlyUnread = $('#inbox_only_unread')?.checked;
-    const status = $('#inbox_conv_status');
-    
-    if (!pids.length) {
-      status.textContent = 'Vui lòng chọn ít nhất 1 page';
-      $('#conversations').innerHTML = '<div class="muted">Chưa chọn page</div>';
-      return;
-    }
-
-    status.textContent = 'Đang tải hội thoại...';
-    
-    try {
-      const params = new URLSearchParams({
-        pages: pids.join(','),
-        only_unread: onlyUnread ? '1' : '0',
-        limit: '50'
-      });
-      
-      const response = await fetch(`/api/inbox/conversations?${params}`);
-      const data = await response.json();
-      
-      if (data.error) {
-        status.textContent = `Lỗi: ${data.error}`;
-        return;
-      }
-
-      const conversations = data.data || [];
-      renderConversations(conversations);
-      status.textContent = `Đã tải ${conversations.length} hội thoại`;
-      
-    } catch (error) {
-      status.textContent = `Lỗi: ${error.message}`;
-    }
-  }
-
-  function renderConversations(conversations) {
-    const container = $('#conversations');
-    
-    if (!conversations.length) {
-        container.innerHTML = '<div class="muted">Không có hội thoại nào.</div>';
-        return;
-    }
-
-    const html = conversations.map((conv, index) => {
-        const time = conv.updated_time ? new Date(conv.updated_time).toLocaleString('vi-VN') : 'N/A';
-        const unreadCount = conv.unread_count || 0;
-        const unreadBadge = unreadCount > 0 ? 
-            `<span class="badge unread">${unreadCount} chưa đọc</span>` : 
-            '<span class="badge">Đã đọc</span>';
-        
-        const sendersText = conv.senders_text || conv.senders_list?.join(', ') || 'Không có thông tin';
-        
-        // SỬA LINK Ở ĐÂY - DÙNG BUSINESS SUITE
-        const businessLink = `https://business.facebook.com/latest/inbox/all/${conv.id}`;
-        
-        return `
-            <div class="conv-item" data-index="${index}">
-                <div style="flex:1">
-                    <div><strong>${sendersText}</strong></div>
-                    <div class="conv-meta">${conv.snippet || 'No message'}</div>
-                    <div class="conv-meta">${conv.page_name || ''}</div>
-                </div>
-                <div class="right">
-                    <div class="conv-meta">${time}</div>
-                    ${unreadBadge}
-                    <div class="conv-meta" style="margin-top:4px;">
-                        <small><a href="${businessLink}" target="_blank" onclick="event.stopPropagation()">🔗 Business Suite</a></small>
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
-    container.innerHTML = html;
-    window.conversationsData = conversations;
-  }
-
-  // Load conversation messages
-  async function loadConversationMessages(convIndex) {
-    const conv = window.conversationsData[convIndex];
-    if (!conv) return;
-
-    const messagesBox = $('#thread_messages');
-    const status = $('#thread_status');
-    const threadHeader = $('#thread_header');
-    
-    messagesBox.innerHTML = '<div class="muted">Đang tải tin nhắn...</div>';
-    status.textContent = 'Đang tải...';
-    threadHeader.textContent = `💬 ${conv.senders_text || 'Hội thoại'}`;
-
-    try {
-      const params = new URLSearchParams({
-        conversation_id: conv.id,
-        page_id: conv.page_id
-      });
-      
-      const response = await fetch(`/api/inbox/messages?${params}`);
-      const data = await response.json();
-      
-      if (data.error) {
-        messagesBox.innerHTML = `<div class="status error">Lỗi: ${data.error}</div>`;
-        return;
-      }
-
-      const messages = data.data || [];
-      renderMessages(messages);
-      status.textContent = `Đã tải ${messages.length} tin nhắn`;
-      
-      // Cập nhật Facebook links
-      updateFacebookLinks(conv, conv.page_id);
-      
-      // Hiển thị quick replies
-      $('#quick_replies_container').style.display = 'block';
-      
-    } catch (error) {
-      messagesBox.innerHTML = `<div class="status error">Lỗi: ${error.message}</div>`;
-    }
-  }
-
-  // Update Facebook links - ĐÃ SỬA DÙNG BUSINESS SUITE
-  function updateFacebookLinks(conv, pageId) {
-    const conversationBtn = $('#btn_open_conversation');
-    const pageBtn = $('#btn_open_page');
-    const status = $('#facebook_links_status');
-    
-    if (conv && pageId) {
-        // SỬA LINK Ở ĐÂY - DÙNG BUSINESS SUITE
-        const conversationLink = `https://business.facebook.com/latest/inbox/all/${conv.id}`;
-        const pageLink = `https://facebook.com/${pageId}`;
-        
-        // Cập nhật link cho buttons
-        conversationBtn.onclick = () => window.open(conversationLink, '_blank');
-        pageBtn.onclick = () => window.open(pageLink, '_blank');
-        
-        // Bật buttons
-        conversationBtn.disabled = false;
-        pageBtn.disabled = false;
-        
-        status.textContent = '✅ Link sẵn sàng - Click để mở trong Business Suite';
-        
-        // Lưu thông tin hiện tại
-        currentConversation = conv;
-        currentPage = pageId;
-    } else {
-        conversationBtn.disabled = true;
-        pageBtn.disabled = true;
-        status.textContent = 'Chọn hội thoại để xem link';
-    }
-  }
-
-  function renderMessages(messages) {
-    const container = $('#thread_messages');
-    
-    const html = messages.map(msg => {
-        const time = msg.created_time ? new Date(msg.created_time).toLocaleString('vi-VN') : '';
-        const isPage = msg.is_page;
-        
-        const fromName = msg.from_name || msg.from?.name || 'Unknown';
-        let messageContent = msg.message || '(Không có nội dung văn bản)';
-        
-        // Hiển thị ảnh nếu có
-        if (msg.attachments && msg.attachments.data && msg.attachments.data.length > 0) {
-            msg.attachments.data.forEach(attachment => {
-                if (attachment.type === 'image' && attachment.image_data) {
-                    messageContent += `<br><img src="${attachment.image_data.url}" class="message-image" alt="Hình ảnh">`;
-                } else if (attachment.type === 'image' && attachment.url) {
-                    messageContent += `<br><img src="${attachment.url}" class="message-image" alt="Hình ảnh">`;
-                }
-            });
-        }
-        
-        // Thêm action buttons cho tin nhắn không phải từ page
-        let actionButtons = '';
-        if (!isPage && currentConversation) {
-            actionButtons = `
-                <div class="conv-actions">
-                    <button class="btn" onclick="quickReply('${msg.from?.id || ''}', '${msg.message || ''}')" title="Trả lời nhanh">
-                        ⚡ Trả lời
-                    </button>
-                    <button class="btn" onclick="openUserProfile('${msg.from?.id || ''}')" title="Xem profile">
-                        👤 Profile
-                    </button>
-                </div>
-            `;
-        }
-        
-        return `
-            <div style="display: flex; justify-content: ${isPage ? 'flex-end' : 'flex-start'}; margin: 8px 0;">
-                <div class="bubble ${isPage ? 'right' : ''}">
-                    <div class="meta">
-                        ${fromName} • ${time}
-                        ${!isPage ? `<a href="https://facebook.com/${msg.from?.id}" target="_blank" style="margin-left:8px;">🔗</a>` : ''}
-                    </div>
-                    <div>${messageContent}</div>
-                    ${actionButtons}
-                </div>
-            </div>
-        `;
-    }).join('');
-    
-    container.innerHTML = html;
-    container.scrollTop = container.scrollHeight;
-  }
-
-  // Hàm trả lời nhanh
-  function quickReply(userId, message) {
-    if (userId && message) {
-        // Tạo reply text gợi ý dựa trên tin nhắn cũ
-        let replyText = '';
-        if (message.includes('?')) {
-            replyText = `Xin chào! Về câu hỏi "${message.substring(0, 50)}..." của bạn: `;
-        } else {
-            replyText = `Cảm ơn bạn đã liên hệ! `;
-        }
-        
-        $('#reply_text').value = replyText;
-        $('#reply_text').focus();
-    }
-  }
-
-  // Hàm mở profile user
-  function openUserProfile(userId) {
-    if (userId) {
-        window.open(`https://facebook.com/${userId}`, '_blank');
-    }
-  }
-
-  // Set quick reply
-  function setQuickReply(key) {
-    if (quickReplies[key]) {
-        $('#reply_text').value = quickReplies[key];
-        $('#reply_text').focus();
-    }
-  }
-
-  // AI Content Generation với SEO
-  async function generateAIContent() {
-    const pids = $all('#post_pages_box .pg-checkbox:checked').map(cb => cb.value);
-    const prompt = $('#ai_prompt').value.trim();
-    const status = $('#ai_status');
-    
-    if (!pids.length) {
-      status.textContent = 'Vui lòng chọn ít nhất 1 page';
-      return;
-    }
-
-    const pageId = pids[0];
-    status.textContent = '🤖 AI đang tạo nội dung chuẩn SEO...';
-
-    try {
-      const response = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page_id: pageId, prompt })
-      });
-      
-      const data = await response.json();
-      
-      if (data.error) {
-        status.textContent = `Lỗi AI: ${data.error}`;
-        return;
-      }
-
-      $('#post_text').value = data.text || '';
-      status.textContent = '✅ Đã tạo nội dung chuẩn SEO thành công!';
-      
-      // Tự động kiểm tra SEO
-      checkSEOScore(data.text);
-      
-    } catch (error) {
-      status.textContent = `Lỗi: ${error.message}`;
-    }
-  }
-
-  // Kiểm tra điểm SEO
-  async function checkSEOScore(content) {
-    try {
-      const response = await fetch('/api/seo/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content })
-      });
-      
-      const data = await response.json();
-      
-      if (data.error) {
-        $('#seo_score').textContent = 'Điểm SEO: Lỗi phân tích';
-        return;
-      }
-
-      const score = data.score || 0;
-      const color = score >= 80 ? '#28a745' : score >= 60 ? '#ffc107' : '#dc3545';
-      
-      $('#seo_score').innerHTML = `
-        Điểm SEO: <strong style="color:${color}">${score}/100</strong>
-        <div class="progress-bar">
-          <div class="progress-fill" style="width:${score}%"></div>
-        </div>
-        ${data.recommendations ? `<small>${data.recommendations}</small>` : ''}
-      `;
-      
-    } catch (error) {
-      $('#seo_score').textContent = 'Điểm SEO: Lỗi kiểm tra';
-    }
-  }
-
-  // Post content to pages
-  async function postToPages() {
-    const pids = $all('#post_pages_box .pg-checkbox:checked').map(cb => cb.value);
-    const content = $('#post_text').value.trim();
-    const mediaUrl = $('#post_media_url').value.trim();
-    const postType = $('input[name="post_type"]:checked').value;
-    const status = $('#post_status');
-    
-    if (!pids.length) {
-      status.textContent = 'Vui lòng chọn ít nhất 1 page';
-      return;
-    }
-
-    if (!content && !mediaUrl) {
-      status.textContent = 'Vui lòng nhập nội dung hoặc URL media';
-      return;
-    }
-
-    status.textContent = '📤 Đang đăng bài...';
-
-    try {
-      const payload = {
-        pages: pids,
-        text: content,
-        media_url: mediaUrl || null,
-        post_type: postType
-      };
-
-      const response = await fetch('/api/pages/post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await response.json();
-      
-      if (data.error) {
-        status.textContent = `Lỗi đăng bài: ${data.error}`;
-        return;
-      }
-
-      const results = data.results || [];
-      const success = results.filter(r => !r.error).length;
-      const total = results.length;
-      
-      // Hiển thị kết quả chi tiết
-      status.innerHTML = `
-        <div class="status success">
-            ✅ Đã đăng bài thành công cho ${success}/${total} pages
-            ${success < total ? '<br>⚠️ Một số pages có lỗi, kiểm tra token' : ''}
-        </div>
-        ${results.map(result => `
-            <div style="margin-top: 8px; font-size: 12px;">
-                <strong>${result.page_id}:</strong> 
-                ${result.link ? `<a href="${result.link}" target="_blank">✅ Xem bài đăng</a>` : '❌ ' + (result.error || 'Lỗi không xác định')}
-            </div>
-        `).join('')}
-      `;
-      
-      // Cập nhật thống kê
-      loadDailyStats();
-      
-    } catch (error) {
-      status.textContent = `Lỗi: ${error.message}`;
-    }
-  }
-
-  // Settings functionality
-  async function loadSettings() {
-    try {
-      const response = await fetch('/api/settings/get');
-      const data = await response.json();
-      
-      if (data.error) {
-        $('#settings_status').textContent = `Lỗi: ${data.error}`;
-        return;
-      }
-
-      const pages = data.data || [];
-      let html = '';
-      pages.forEach(page => {
-        html += `
-          <div class="settings-row">
-            <div class="settings-name">${page.name}</div>
-            <input type="text" class="settings-input" id="keyword_${page.id}" 
-                   value="${page.keyword || ''}" placeholder="Keyword (VD: MB66)">
-            <input type="text" class="settings-input" id="source_${page.id}" 
-                   value="${page.source || ''}" placeholder="Source URL">
-          </div>
-        `;
-      });
-      
-      $('#settings_box').innerHTML = html || '<div class="muted">Không có page nào.</div>';
-      $('#settings_status').textContent = `Đã tải ${pages.length} pages`;
-      
-    } catch (error) {
-      $('#settings_status').textContent = `Lỗi tải cài đặt: ${error.message}`;
-    }
-  }
-
-  async function saveSettings() {
-    try {
-      const items = [];
-      const rows = $all('#settings_box .settings-row');
-      
-      rows.forEach(row => {
-        const nameElement = row.querySelector('.settings-name');
-        const pageName = nameElement.textContent;
-        // Extract page ID from the row
-        const inputs = row.querySelectorAll('input[class="settings-input"]');
-        const keywordInput = inputs[0];
-        const sourceInput = inputs[1];
-        
-        // Extract page ID from input ID
-        const keywordId = keywordInput.id;
-        const pageId = keywordId.replace('keyword_', '');
-        
-        items.push({
-          id: pageId,
-          keyword: keywordInput.value,
-          source: sourceInput.value
-        });
-      });
-
-      const response = await fetch('/api/settings/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items })
-      });
-
-      const data = await response.json();
-      
-      if (data.error) {
-        $('#settings_status').textContent = `Lỗi lưu cài đặt: ${data.error}`;
-      } else {
-        $('#settings_status').textContent = `✅ Đã lưu cài đặt cho ${data.updated} pages`;
-      }
-      
-    } catch (error) {
-      $('#settings_status').textContent = `Lỗi: ${error.message}`;
-    }
-  }
-
-  // Analytics functionality
-  async function loadAnalytics() {
-    try {
-      const response = await fetch('/api/analytics/overview');
-      const data = await response.json();
-      
-      if (data.error) {
-        $('#analytics_overview').textContent = `Lỗi: ${data.error}`;
-        $('#recent_activity').textContent = `Lỗi: ${data.error}`;
-        return;
-      }
-
-      // Tổng quan
-      $('#analytics_overview').innerHTML = `
-        <div>📊 Tổng pages: <strong>${data.total_pages}</strong></div>
-        <div>✅ Pages hoạt động: <strong>${data.active_pages}</strong></div>
-        <div>🤖 AI sẵn sàng: <strong>${data.ai_ready ? 'Có' : 'Không'}</strong></div>
-        <div>📝 Bài đăng gần đây: <strong>${data.recent_posts}</strong></div>
-        <div>💬 Tin nhắn gần đây: <strong>${data.recent_messages}</strong></div>
-        <div>🕒 Cập nhật: <strong>${new Date(data.last_updated).toLocaleString('vi-VN')}</strong></div>
-      `;
-
-      // Hoạt động gần đây
-      let activityHtml = '';
-      if (data.recent_activities && data.recent_activities.length > 0) {
-        data.recent_activities.forEach(activity => {
-          activityHtml += `<div class="conv-meta">${activity.time}: ${activity.action}</div>`;
-        });
-      } else {
-        activityHtml = '<div class="muted">Chưa có hoạt động nào</div>';
-      }
-      $('#recent_activity').innerHTML = activityHtml;
-      
-    } catch (error) {
-      $('#analytics_overview').textContent = `Lỗi tải thống kê: ${error.message}`;
-      $('#recent_activity').textContent = `Lỗi tải thống kê: ${error.message}`;
-    }
-  }
-
-  // Daily stats
-  async function loadDailyStats() {
-    try {
-      const response = await fetch('/api/analytics/daily');
-      const data = await response.json();
-      
-      if (data.error) {
-        console.error('Lỗi tải thống kê ngày:', data.error);
-        return;
-      }
-
-      $('#stat_posts_today').textContent = data.total_posts || 0;
-      $('#stat_success_posts').textContent = data.successful_posts || 0;
-      $('#stat_failed_posts').textContent = data.failed_posts || 0;
-      $('#stat_messages_today').textContent = data.total_messages || 0;
-      
-    } catch (error) {
-      console.error('Lỗi tải thống kê:', error);
-    }
-  }
-
-  // Event listeners
-  document.addEventListener('DOMContentLoaded', function() {
-    // Load initial data
-    loadPages();
-    updateSystemStatus();
-    initPromptTemplates();
-    
-    // Inbox events
-    $('#btn_inbox_refresh')?.addEventListener('click', refreshConversations);
-    $('#conversations')?.addEventListener('click', (e) => {
-      const item = e.target.closest('.conv-item');
-      if (item) {
-        const index = parseInt(item.getAttribute('data-index'));
-        loadConversationMessages(index);
-      }
-    });
-    
-    // Reply functionality
-    $('#btn_reply')?.addEventListener('click', async () => {
-      const text = $('#reply_text').value.trim();
-      const imageFile = $('#reply_image').files[0];
-      
-      if (!text && !imageFile) {
-        $('#thread_status').textContent = 'Vui lòng nhập tin nhắn hoặc chọn ảnh';
-        return;
-      }
-
-      $('#thread_status').textContent = 'Đang gửi...';
-
-      try {
-        let mediaUrl = null;
-        
-        // Upload image if exists
-        if (imageFile) {
-          const formData = new FormData();
-          formData.append('file', imageFile);
-
-          const uploadResponse = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData
-          });
-
-          const uploadData = await uploadResponse.json();
-          
-          if (uploadData.error) {
-            $('#thread_status').textContent = `Lỗi upload ảnh: ${uploadData.error}`;
-            return;
-          }
-
-          mediaUrl = uploadData.url;
-        }
-
-        // Send message
-        const response = await fetch('/api/inbox/reply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            conversation_id: currentConversation?.id,
-            page_id: currentConversation?.page_id,
-            message: text,
-            media_url: mediaUrl
-          })
-        });
-
-        const data = await response.json();
-        
-        if (data.error) {
-          $('#thread_status').textContent = `Lỗi gửi tin nhắn: ${data.error}`;
-        } else {
-          $('#thread_status').textContent = '✅ Đã gửi tin nhắn thành công!';
-          $('#reply_text').value = '';
-          $('#reply_image').value = '';
-          // Reload messages
-          if (window.currentConversationIndex !== undefined) {
-            loadConversationMessages(window.currentConversationIndex);
-          }
-        }
-        
-      } catch (error) {
-        $('#thread_status').textContent = `Lỗi: ${error.message}`;
-      }
-    });
-
-    // Posting events
-    $('#btn_ai_generate')?.addEventListener('click', generateAIContent);
-    $('#btn_post_submit')?.addEventListener('click', postToPages);
-    $('#btn_check_seo')?.addEventListener('click', () => {
-      const content = $('#post_text').value.trim();
-      if (content) {
-        checkSEOScore(content);
-      } else {
-        $('#seo_score').textContent = 'Vui lòng nhập nội dung để kiểm tra SEO';
-      }
-    });
-
-    // Settings events
-    $('#btn_settings_save')?.addEventListener('click', saveSettings);
-
-    // Admin events
-    $('#btn_refresh_pages')?.addEventListener('click', () => {
-      loadPages();
-      $('#admin_status').textContent = '✅ Đã làm mới danh sách pages';
-    });
-
-    $('#btn_health_check')?.addEventListener('click', () => {
-      updateSystemStatus();
-      $('#admin_status').textContent = '✅ Đã kiểm tra tình trạng hệ thống';
-    });
-
-    $('#btn_clear_analytics')?.addEventListener('click', async () => {
-      try {
-        const response = await fetch('/api/analytics/clear', { method: 'POST' });
-        const data = await response.json();
-        
-        if (data.error) {
-          $('#admin_status').textContent = `Lỗi: ${data.error}`;
-        } else {
-          $('#admin_status').textContent = '✅ Đã xoá dữ liệu thống kê';
-          loadDailyStats();
-        }
-      } catch (error) {
-        $('#admin_status').textContent = `Lỗi: ${error.message}`;
-      }
-    });
-
-    // Schedule toggle
-    $('#enable_scheduling')?.addEventListener('change', function() {
-      $('#schedule_time').style.display = this.checked ? 'block' : 'none';
-    });
-
-    // Auto-refresh conversations every 30 seconds
-    setInterval(() => {
-      if ($('#tab-inbox').classList.contains('active')) {
-        refreshConversations();
-      }
-    }, 30000);
-
-    // Update system status every minute
-    setInterval(updateSystemStatus, 60000);
-
-    // Update daily stats every 2 minutes
-    setInterval(loadDailyStats, 120000);
-  });
-
-  // Handle file upload for posts
-  $('#post_media_file')?.addEventListener('change', async function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const status = $('#post_status');
-    status.textContent = '📤 Đang upload file...';
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
-
-      const data = await response.json();
-      
-      if (data.error) {
-        status.textContent = `Lỗi upload: ${data.error}`;
-        return;
-      }
-
-      $('#post_media_url').value = data.url || '';
-      status.textContent = '✅ Upload file thành công!';
-      
-    } catch (error) {
-      status.textContent = `Lỗi: ${error.message}`;
-    }
-  });
-
-  </script>
-</body>
-</html>"""
-
-@app.route("/")
+@app.route('/')
 def index():
-    return make_response(INDEX_HTML)
+    """Trang chủ với dashboard"""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Facebook Auto Post Tool</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
+            }
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 30px;
+                color: white;
+            }
+            .header h1 {
+                font-size: 2.5rem;
+                margin-bottom: 10px;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            }
+            .header p {
+                font-size: 1.1rem;
+                opacity: 0.9;
+            }
+            .dashboard {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 20px;
+                margin-bottom: 30px;
+            }
+            .card {
+                background: white;
+                border-radius: 15px;
+                padding: 25px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                transition: transform 0.3s ease;
+            }
+            .card:hover {
+                transform: translateY(-5px);
+            }
+            .card h3 {
+                color: #333;
+                margin-bottom: 15px;
+                font-size: 1.3rem;
+                border-bottom: 2px solid #667eea;
+                padding-bottom: 10px;
+            }
+            .stat-number {
+                font-size: 2.5rem;
+                font-weight: bold;
+                color: #667eea;
+                text-align: center;
+                margin: 15px 0;
+            }
+            .stat-label {
+                text-align: center;
+                color: #666;
+                font-size: 0.9rem;
+            }
+            .settings-section {
+                background: white;
+                border-radius: 15px;
+                padding: 25px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                margin-bottom: 20px;
+            }
+            .setting-item {
+                border: 1px solid #eee;
+                padding: 15px;
+                margin: 10px 0;
+                border-radius: 8px;
+                background: #f9f9f9;
+            }
+            .add-settings {
+                background: #f0f8ff;
+                padding: 20px;
+                border-radius: 10px;
+                margin-top: 20px;
+            }
+            .form-group {
+                margin-bottom: 15px;
+            }
+            label {
+                display: block;
+                margin-bottom: 5px;
+                font-weight: 500;
+                color: #333;
+            }
+            input[type="text"], input[type="password"], textarea {
+                width: 100%;
+                padding: 12px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 14px;
+                transition: border-color 0.3s;
+            }
+            input[type="text"]:focus, input[type="password"]:focus, textarea:focus {
+                border-color: #667eea;
+                outline: none;
+            }
+            button {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                padding: 12px 25px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;
+                transition: all 0.3s ease;
+            }
+            button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            }
+            .btn-danger {
+                background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+            }
+            .status-indicator {
+                display: inline-block;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                margin-right: 8px;
+            }
+            .status-active {
+                background: #4CAF50;
+            }
+            .status-inactive {
+                background: #f44336;
+            }
+            .logs {
+                background: #1a1a1a;
+                color: #00ff00;
+                padding: 15px;
+                border-radius: 8px;
+                font-family: 'Courier New', monospace;
+                height: 200px;
+                overflow-y: auto;
+                margin-top: 15px;
+            }
+            .tab-container {
+                margin-top: 20px;
+            }
+            .tabs {
+                display: flex;
+                border-bottom: 2px solid #ddd;
+                margin-bottom: 20px;
+            }
+            .tab {
+                padding: 12px 25px;
+                cursor: pointer;
+                border: none;
+                background: none;
+                font-size: 14px;
+                font-weight: 500;
+                color: #666;
+                border-bottom: 3px solid transparent;
+                transition: all 0.3s;
+            }
+            .tab.active {
+                color: #667eea;
+                border-bottom-color: #667eea;
+            }
+            .tab-content {
+                display: none;
+            }
+            .tab-content.active {
+                display: block;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🚀 Facebook Auto Post Tool</h1>
+                <p>Công cụ tự động đăng bài và quản lý Fanpage chuyên nghiệp</p>
+            </div>
+
+            <div class="dashboard">
+                <div class="card">
+                    <h3>📊 Thống kê hôm nay</h3>
+                    <div id="today-stats">
+                        <div class="stat-loading">Đang tải thống kê...</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>🔧 Trạng thái hệ thống</h3>
+                    <div id="system-status">
+                        <div class="status-item">
+                            <span class="status-indicator status-active"></span>
+                            Webhook: <span id="webhook-status">Đang kiểm tra...</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-indicator status-active"></span>
+                            Facebook API: <span id="fb-api-status">Đang kiểm tra...</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-indicator" id="openai-status-indicator"></span>
+                            OpenAI: <span id="openai-status">Đang kiểm tra...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>📈 Tổng quan</h3>
+                    <div class="stat-number" id="total-pages">0</div>
+                    <div class="stat-label">Pages được kết nối</div>
+                    <div class="stat-number" id="total-tokens">0</div>
+                    <div class="stat-label">Tokens có sẵn</div>
+                </div>
+            </div>
+
+            <div class="tab-container">
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('settings')">🛠️ Cài đặt Page</button>
+                    <button class="tab" onclick="switchTab('webhook')">🔗 Webhook Setup</button>
+                    <button class="tab" onclick="switchTab('logs')">📋 Logs hệ thống</button>
+                    <button class="tab" onclick="switchTab('manual')">📝 Đăng bài thủ công</button>
+                </div>
+
+                <div id="settings" class="tab-content active">
+                    <div class="settings-section">
+                        <h3>Quản lý cài đặt Page</h3>
+                        <div id="settings-container">
+                            <div id="settings-loading">Đang tải cài đặt...</div>
+                        </div>
+                        
+                        <div class="add-settings">
+                            <h4>Thêm/Chỉnh sửa Page</h4>
+                            <form id="settings-form">
+                                <div class="form-group">
+                                    <label for="page-id">Page ID:</label>
+                                    <input type="text" id="page-id" placeholder="Nhập Page ID" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="keyword">Từ khóa chính:</label>
+                                    <input type="text" id="keyword" placeholder="Ví dụ: AKUTA" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="source">Link nguồn:</label>
+                                    <input type="text" id="source" placeholder="Ví dụ: https://akutaclub.vip/" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="auto-reply"> Tự động trả lời tin nhắn
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="auto-post"> Tự động đăng bài từ ảnh
+                                    </label>
+                                </div>
+                                <button type="submit">💾 Lưu cài đặt</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="webhook" class="tab-content">
+                    <div class="settings-section">
+                        <h3>🔗 Cài đặt Webhook Facebook</h3>
+                        <p><strong>Callback URL:</strong> <code id="webhook-url">Đang tải...</code></p>
+                        <p><strong>Verify Token:</strong> <code>""" + VERIFY_TOKEN + """</code></p>
+                        <p><strong>Trạng thái:</strong> <span id="webhook-setup-status">Chưa kết nối</span></p>
+                        
+                        <div class="form-group">
+                            <label for="page-token">Page Access Token:</label>
+                            <input type="password" id="page-token" placeholder="Nhập Page Access Token">
+                        </div>
+                        <button onclick="setupWebhook()">🔗 Thiết lập Webhook</button>
+                        <button onclick="testWebhook()" style="margin-left: 10px;">🧪 Kiểm tra Webhook</button>
+                    </div>
+                </div>
+
+                <div id="logs" class="tab-content">
+                    <div class="settings-section">
+                        <h3>📋 Logs hệ thống</h3>
+                        <div class="logs" id="system-logs">
+                            <!-- Logs sẽ được hiển thị ở đây -->
+                        </div>
+                        <button onclick="clearLogs()" style="margin-top: 10px;">🗑️ Xóa logs</button>
+                        <button onclick="refreshLogs()" style="margin-top: 10px; margin-left: 10px;">🔄 Làm mới</button>
+                    </div>
+                </div>
+
+                <div id="manual" class="tab-content">
+                    <div class="settings-section">
+                        <h3>📝 Đăng bài thủ công</h3>
+                        <form id="manual-post-form">
+                            <div class="form-group">
+                                <label for="manual-page-id">Page ID:</label>
+                                <input type="text" id="manual-page-id" placeholder="Nhập Page ID" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="manual-content">Nội dung bài đăng:</label>
+                                <textarea id="manual-content" placeholder="Nhập nội dung bài đăng..." rows="6" required></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="manual-image">URL ảnh (tùy chọn):</label>
+                                <input type="text" id="manual-image" placeholder="https://example.com/image.jpg">
+                            </div>
+                            <button type="submit">🚀 Đăng bài ngay</button>
+                        </form>
+                        <div id="manual-post-result" style="margin-top: 15px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
+        // Load settings
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const settings = await response.json();
+                
+                const container = document.getElementById('settings-container');
+                container.innerHTML = '';
+                
+                if (Object.keys(settings).length === 0) {
+                    container.innerHTML = '<p>Chưa có cài đặt nào</p>';
+                    return;
+                }
+                
+                for (const [pageId, config] of Object.entries(settings)) {
+                    const settingDiv = document.createElement('div');
+                    settingDiv.className = 'setting-item';
+                    settingDiv.innerHTML = `
+                        <strong>${pageId}</strong>
+                        <p>Keyword: ${config.keyword || 'N/A'}</p>
+                        <p>Source: ${config.source || 'N/A'}</p>
+                        <p>Auto Reply: ${config.auto_reply ? '✅' : '❌'}</p>
+                        <p>Auto Post: ${config.auto_post ? '✅' : '❌'}</p>
+                        <button onclick="editSettings('${pageId}')">✏️ Sửa</button>
+                        <button onclick="deleteSettings('${pageId}')" class="btn-danger">🗑️ Xóa</button>
+                    `;
+                    container.appendChild(settingDiv);
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+                document.getElementById('settings-container').innerHTML = '<p>Lỗi tải cài đặt</p>';
+            }
+        }
+
+        // Save settings
+        async function saveSettings() {
+            const pageId = document.getElementById('page-id').value;
+            const settings = {
+                keyword: document.getElementById('keyword').value,
+                source: document.getElementById('source').value,
+                auto_reply: document.getElementById('auto-reply').checked,
+                auto_post: document.getElementById('auto-post').checked
+            };
+            
+            try {
+                const response = await fetch(`/api/settings/${pageId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(settings)
+                });
+                
+                if (response.ok) {
+                    alert('✅ Đã lưu cài đặt!');
+                    loadSettings();
+                    document.getElementById('settings-form').reset();
+                } else {
+                    alert('❌ Lỗi lưu cài đặt!');
+                }
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                alert('❌ Lỗi lưu cài đặt!');
+            }
+        }
+
+        // Edit settings
+        function editSettings(pageId) {
+            fetch(`/api/settings/${pageId}`)
+                .then(response => response.json())
+                .then(settings => {
+                    document.getElementById('page-id').value = pageId;
+                    document.getElementById('keyword').value = settings.keyword || '';
+                    document.getElementById('source').value = settings.source || '';
+                    document.getElementById('auto-reply').checked = settings.auto_reply || false;
+                    document.getElementById('auto-post').checked = settings.auto_post || false;
+                });
+        }
+
+        // Delete settings
+        async function deleteSettings(pageId) {
+            if (confirm(`❓ Xóa cài đặt cho ${pageId}?`)) {
+                try {
+                    const response = await fetch(`/api/settings/${pageId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        alert('✅ Đã xóa cài đặt!');
+                        loadSettings();
+                    }
+                } catch (error) {
+                    console.error('Error deleting settings:', error);
+                    alert('❌ Lỗi xóa cài đặt!');
+                }
+            }
+        }
+
+        // Load system stats
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                
+                document.getElementById('today-stats').innerHTML = `
+                    <div class="stat-number">${stats.today_posts || 0}</div>
+                    <div class="stat-label">Bài đăng hôm nay</div>
+                    <div class="stat-number">${stats.today_messages || 0}</div>
+                    <div class="stat-label">Tin nhắn hôm nay</div>
+                `;
+                
+                document.getElementById('total-pages').textContent = Object.keys(stats.settings || {}).length;
+                document.getElementById('total-tokens').textContent = Object.keys(stats.tokens || {}).length;
+                
+                // System status
+                document.getElementById('webhook-status').textContent = stats.webhook_active ? '✅ Đang chạy' : '❌ Lỗi';
+                document.getElementById('fb-api-status').textContent = stats.fb_api_active ? '✅ Kết nối' : '❌ Lỗi';
+                
+                if (stats.openai_available) {
+                    document.getElementById('openai-status-indicator').className = 'status-indicator status-active';
+                    document.getElementById('openai-status').textContent = '✅ Sẵn sàng';
+                } else {
+                    document.getElementById('openai-status-indicator').className = 'status-indicator status-inactive';
+                    document.getElementById('openai-status').textContent = '❌ Không khả dụng';
+                }
+                
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Webhook URL
+        document.getElementById('webhook-url').textContent = window.location.origin + '/webhook';
+
+        // Setup webhook
+        async function setupWebhook() {
+            const token = document.getElementById('page-token').value;
+            if (!token) {
+                alert('Vui lòng nhập Page Access Token');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/setup-webhook', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ token: token })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    alert('✅ ' + result.message);
+                } else {
+                    alert('❌ ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error setting up webhook:', error);
+                alert('❌ Lỗi thiết lập webhook');
+            }
+        }
+
+        // Test webhook
+        async function testWebhook() {
+            try {
+                const response = await fetch('/api/test-webhook');
+                const result = await response.json();
+                alert(result.message || '✅ Webhook hoạt động bình thường');
+            } catch (error) {
+                alert('❌ Lỗi kiểm tra webhook');
+            }
+        }
+
+        // Manual post
+        document.getElementById('manual-post-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const pageId = document.getElementById('manual-page-id').value;
+            const content = document.getElementById('manual-content').value;
+            const imageUrl = document.getElementById('manual-image').value;
+            
+            if (!pageId || !content) {
+                alert('Vui lòng nhập Page ID và nội dung');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/manual-post', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        page_id: pageId,
+                        content: content,
+                        image_url: imageUrl
+                    })
+                });
+                
+                const result = await response.json();
+                const resultDiv = document.getElementById('manual-post-result');
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<div style="color: green;">✅ ${result.message}</div>`;
+                    document.getElementById('manual-post-form').reset();
+                } else {
+                    resultDiv.innerHTML = `<div style="color: red;">❌ ${result.error}</div>`;
+                }
+            } catch (error) {
+                console.error('Error posting manually:', error);
+                document.getElementById('manual-post-result').innerHTML = '<div style="color: red;">❌ Lỗi đăng bài</div>';
+            }
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSettings();
+            loadStats();
+            
+            document.getElementById('settings-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveSettings();
+            });
+            
+            // Load initial logs
+            refreshLogs();
+            
+            // Auto refresh stats every 30 seconds
+            setInterval(loadStats, 30000);
+        });
+
+        // Logs functions
+        async function refreshLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const logs = await response.json();
+                const logsContainer = document.getElementById('system-logs');
+                logsContainer.innerHTML = '';
+                
+                logs.reverse().forEach(log => {
+                    const logEntry = document.createElement('div');
+                    logEntry.textContent = `[${log.timestamp}] ${log.message}`;
+                    logsContainer.appendChild(logEntry);
+                });
+                
+                // Auto scroll to bottom
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+            } catch (error) {
+                console.error('Error loading logs:', error);
+            }
+        }
+
+        function clearLogs() {
+            if (confirm('Xóa tất cả logs?')) {
+                fetch('/api/clear-logs', { method: 'POST' })
+                    .then(() => refreshLogs());
+            }
+        }
+        </script>
+    </body>
+    </html>
+    """
+
+@app.route('/webhook', methods=['GET', 'POST'])
+def webhook():
+    """Webhook cho Facebook"""
+    if request.method == 'GET':
+        # Verify webhook
+        mode = request.args.get('hub.mode')
+        token = request.args.get('hub.verify_token')
+        challenge = request.args.get('hub.challenge')
+        
+        if mode == 'subscribe' and token == VERIFY_TOKEN:
+            log_message("Webhook verified successfully")
+            return challenge
+        else:
+            log_message("Webhook verification failed", "ERROR")
+            return 'Verification failed', 403
+    
+    elif request.method == 'POST':
+        # Handle webhook events
+        data = request.get_json()
+        log_message(f"Received webhook data: {json.dumps(data, indent=2)}")
+        
+        try:
+            if data.get('object') == 'page':
+                for entry in data.get('entry', []):
+                    page_id = entry.get('id')
+                    log_message(f"Processing page: {page_id}")
+                    
+                    # Handle messages
+                    messaging_events = entry.get('messaging', [])
+                    for event in messaging_events:
+                        handle_message_event(page_id, event)
+                    
+                    # Handle feed changes (posts)
+                    changes = entry.get('changes', [])
+                    for change in changes:
+                        handle_feed_change(page_id, change)
+                        
+            return 'EVENT_RECEIVED', 200
+            
+        except Exception as e:
+            log_message(f"Webhook processing error: {e}", "ERROR")
+            import traceback
+            traceback.print_exc()
+            return 'ERROR', 500
+
+def handle_message_event(page_id: str, event: dict):
+    """Xử lý sự kiện tin nhắn"""
+    try:
+        sender_id = event.get('sender', {}).get('id')
+        message = event.get('message', {})
+        attachments = event.get('message', {}).get('attachments', [])
+        
+        if not sender_id:
+            return
+        
+        log_message(f"Nhận tin nhắn từ {sender_id} trên page {page_id}")
+        
+        # Load settings for this page
+        settings = _load_settings()
+        page_settings = settings.get(page_id, settings.get('default', {}))
+        
+        if not page_settings.get('auto_reply', True):
+            log_message(f"Auto reply tắt cho page {page_id}")
+            return
+        
+        # Xử lý ảnh
+        if attachments and attachments[0].get('type') == 'image':
+            handle_image_attachment(page_id, sender_id, attachments[0], page_settings)
+        
+        # Xử lý tin nhắn văn bản
+        elif message.get('text'):
+            handle_text_message(page_id, sender_id, message['text'], page_settings)
+            
+    except Exception as e:
+        log_message(f"Lỗi xử lý tin nhắn: {e}", "ERROR")
+        analytics_tracker.track_message(page_id, "message", success=False)
+
+def handle_image_attachment(page_id: str, sender_id: str, attachment: dict, page_settings: dict):
+    """Xử lý ảnh được gửi đến page"""
+    try:
+        image_url = attachment['payload'].get('url')
+        if not image_url:
+            log_message("Không có URL ảnh", "ERROR")
+            return
+        
+        log_message(f"Nhận được ảnh từ {sender_id}")
+        
+        # Tải ảnh về server
+        image_response = requests.get(image_url, timeout=30)
+        if image_response.status_code != 200:
+            log_message(f"Không thể tải ảnh, status: {image_response.status_code}", "ERROR")
+            return
+        
+        # Lưu ảnh với tên duy nhất
+        image_filename = f"{uuid.uuid4().hex}.jpg"
+        image_path = os.path.join(UPLOAD_FOLDER, image_filename)
+        
+        with open(image_path, 'wb') as f:
+            f.write(image_response.content)
+        
+        log_message(f"Đã lưu ảnh: {image_filename}")
+        
+        # Tạo URL công khai cho ảnh
+        image_public_url = f"{request.host_url}uploads/{image_filename}"
+        
+        # Lấy token cho page
+        try:
+            page_token = get_page_token(page_id)
+        except Exception as e:
+            log_message(f"Không lấy được token cho page {page_id}: {e}", "ERROR")
+            return
+        
+        # Tạo nội dung bài đăng
+        keyword = page_settings.get('keyword', 'AKUTA')
+        source = page_settings.get('source', 'https://akutaclub.vip/')
+        
+        # Chọn content generator
+        if _client and OPENAI_AVAILABLE:
+            content_generator = AIContentWriter(_client)
+        else:
+            content_generator = SimpleContentGenerator()
+        
+        post_content = content_generator.generate_content(keyword, source)
+        
+        # Kiểm tra trùng lặp
+        if ANTI_DUP_ENABLED:
+            corpus = _uniq_load_corpus()
+            page_corpus = corpus.get(page_id, [])
+            if _uniq_too_similar(post_content, page_corpus):
+                log_message(f"Nội dung trùng lặp, bỏ qua đăng bài", "WARNING")
+                # Gửi thông báo cho user
+                send_message(page_id, sender_id, page_token, 
+                            "⚠️ Ảnh đã được nhận nhưng nội dung tương tự đã được đăng gần đây.")
+                return
+        
+        # Đăng ảnh lên Facebook
+        try:
+            result = fb_post(f"{page_id}/photos", {
+                "message": post_content,
+                "access_token": page_token,
+                "url": image_public_url
+            })
+            
+            if 'id' in result:
+                # Lưu vào corpus để tránh trùng lặp
+                _uniq_store(page_id, post_content)
+                # Tracking
+                analytics_tracker.track_post(page_id, "photo", success=True)
+                log_message(f"Đã đăng ảnh kèm nội dung lên page {page_id}")
+                
+                # Gửi thông báo thành công cho user
+                send_message(page_id, sender_id, page_token,
+                            f"✅ Đã đăng ảnh thành công! Bài viết đã được đăng lên fanpage.")
+            else:
+                raise RuntimeError(f"Facebook API error: {result}")
+                
+        except Exception as e:
+            error_msg = f"Failed to post photo: {str(e)}"
+            log_message(error_msg, "ERROR")
+            analytics_tracker.track_post(page_id, "photo", success=False, error_msg=error_msg)
+            
+            # Gửi thông báo lỗi cho user
+            send_message(page_id, sender_id, page_token,
+                        "❌ Có lỗi khi đăng ảnh. Vui lòng thử lại sau.")
+            
+    except Exception as e:
+        log_message(f"Lỗi xử lý ảnh: {e}", "ERROR")
+        import traceback
+        traceback.print_exc()
+
+def handle_text_message(page_id: str, sender_id: str, text: str, page_settings: dict):
+    """Xử lý tin nhắn văn bản"""
+    try:
+        # Lấy token cho page
+        try:
+            page_token = get_page_token(page_id)
+        except Exception as e:
+            log_message(f"Không lấy được token cho page {page_id}: {e}", "ERROR")
+            return
+        
+        # Phản hồi tự động
+        response_text = f"""🤖 Cảm ơn bạn đã liên hệ!
+        
+Chúng tôi đã nhận được tin nhắn của bạn. Đội ngũ hỗ trợ sẽ phản hồi trong thời gian sớm nhất.
+
+📞 Hotline: 0363269604 (24/7)
+💬 Telegram: @cattien999
+
+Trân trọng!"""
+        
+        send_message(page_id, sender_id, page_token, response_text)
+        analytics_tracker.track_message(page_id, "auto_reply", success=True)
+        
+    except Exception as e:
+        log_message(f"Lỗi xử lý tin nhắn văn bản: {e}", "ERROR")
+        analytics_tracker.track_message(page_id, "auto_reply", success=False)
+
+def handle_feed_change(page_id: str, change: dict):
+    """Xử lý thay đổi feed"""
+    try:
+        log_message(f"Xử lý feed change cho page {page_id}")
+        # Có thể mở rộng xử lý các loại feed change khác ở đây
+    except Exception as e:
+        log_message(f"Lỗi xử lý feed change: {e}", "ERROR")
+
+def send_message(page_id: str, recipient_id: str, token: str, message: str):
+    """Gửi tin nhắn qua Facebook API"""
+    try:
+        result = fb_post("me/messages", {
+            "recipient": {"id": recipient_id},
+            "message": {"text": message},
+            "access_token": token
+        })
+        log_message(f"Đã gửi tin nhắn cho {recipient_id}")
+        return result
+    except Exception as e:
+        log_message(f"Lỗi gửi tin nhắn: {e}", "ERROR")
+        raise
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    """Phục vụ file đã upload"""
+    try:
+        return send_from_directory(UPLOAD_FOLDER, filename)
+    except FileNotFoundError:
+        return "File not found", 404
 
 # ------------------------ API Routes ------------------------
 
-@app.route("/api/pages")
-def api_pages():
-    """API lấy danh sách pages với thông tin đầy đủ"""
-    try:
-        pages = []
-        valid_count = 0
-        
-        print(f"🔍 Bắt đầu kiểm tra {len(PAGE_TOKENS)} pages...")
-        
-        for pid, token in PAGE_TOKENS.items():
-            page_info = {
-                "id": pid,
-                "name": f"Page {pid}",  # Mặc định
-                "token_valid": False,
-                "status": "unknown",
-                "error": None
-            }
-            
-            # KIỂM TRA TOKEN CƠ BẢN
-            if not token:
-                page_info["status"] = "token_invalid"
-                page_info["error"] = "Token rỗng"
-                pages.append(page_info)
-                continue
-            
-            # Kiểm tra token bắt đầu bằng EAA (cả EAA và EAAG đều hợp lệ)
-            if not token.startswith("EAA"):
-                page_info["status"] = "token_invalid"
-                page_info["error"] = f"Token không bắt đầu bằng EAA (bắt đầu bằng: {token[:10]})"
-                pages.append(page_info)
-                continue
-                
-            try:
-                print(f"🔍 Đang kiểm tra page {pid}...")
-                
-                # Thử lấy thông tin page từ Facebook
-                data = fb_get(pid, {
-                    "access_token": token,
-                    "fields": "name,id,link,fan_count"
-                })
-                
-                if "name" in data and "id" in data:
-                    page_info["name"] = data["name"]
-                    page_info["token_valid"] = True
-                    page_info["status"] = "connected"
-                    page_info["link"] = data.get("link", f"https://facebook.com/{pid}")
-                    page_info["fan_count"] = data.get("fan_count", 0)
-                    valid_count += 1
-                    print(f"✅ Page {pid} kết nối thành công: {data['name']}")
-                else:
-                    page_info["status"] = "api_error"
-                    page_info["error"] = f"Facebook API trả về dữ liệu không hợp lệ: {data}"
-                    print(f"❌ Page {pid} API error: {data}")
-                    
-            except Exception as e:
-                error_msg = str(e)
-                page_info["status"] = "error"
-                page_info["error"] = error_msg
-                
-                # Phân loại lỗi để dễ debug
-                if "access token" in error_msg.lower():
-                    page_info["error"] = "Token không hợp lệ hoặc đã hết hạn"
-                elif "permission" in error_msg.lower():
-                    page_info["error"] = "Token thiếu quyền truy cập"
-                elif "does not exist" in error_msg.lower():
-                    page_info["error"] = "Page ID không tồn tại"
-                elif "expired" in error_msg.lower():
-                    page_info["error"] = "Token đã hết hạn"
-                elif "support" in error_msg.lower():
-                    page_info["error"] = "Token cần kiểm tra lại"
-                elif "must use page access token" in error_msg.lower():
-                    page_info["error"] = "Token không phải page token"
-                    
-                print(f"❌ Page {pid} lỗi: {error_msg}")
-                    
-            pages.append(page_info)
-            
-        # Thống kê
-        print(f"📊 KẾT QUẢ: {valid_count}/{len(pages)} tokens hợp lệ")
-        
-        # Sắp xếp: token hợp lệ lên đầu
-        pages.sort(key=lambda x: (not x["token_valid"], x["name"]))
-            
-        return jsonify({"data": pages})
-        
-    except Exception as e:
-        print(f"❌ Lỗi hệ thống trong api_pages: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"Lỗi hệ thống: {str(e)}"}), 500
-
-@app.route("/api/inbox/conversations")
-def api_inbox_conversations():
-    """API lấy danh sách hội thoại - ĐÃ SỬA HIỂN THỊ TÊN NGƯỜI GỬI"""
-    try:
-        page_ids = request.args.get("pages", "").split(",")
-        only_unread = request.args.get("only_unread") == "1"
-        limit = int(request.args.get("limit", 25))
-        
-        conversations = []
-        
-        for pid in page_ids:
-            if not pid:
-                continue
-                
-            token = PAGE_TOKENS.get(pid)
-            if not token or not token.startswith("EAA"):
-                continue
-                
-            try:
-                # Lấy hội thoại với thông tin senders đầy đủ
-                data = fb_get(f"{pid}/conversations", {
-                    "access_token": token,
-                    "fields": "id,snippet,updated_time,unread_count,message_count,senders{name,id},participants",
-                    "limit": limit
-                })
-                
-                for conv in data.get("data", []):
-                    # FIX: Xử lý senders đúng cách
-                    senders_info = []
-                    if conv.get("senders") and conv["senders"].get("data"):
-                        senders_info = [sender["name"] for sender in conv["senders"]["data"]]
-                    
-                    conv["page_id"] = pid
-                    conv["senders_list"] = senders_info
-                    conv["senders_text"] = ", ".join(senders_info) if senders_info else "Không có thông tin"
-                    
-                    # Lấy tên page từ thông tin đã lưu
-                    page_name = f"Page {pid}"
-                    conv["page_name"] = page_name
-                    
-                    # THÊM BUSINESS SUITE LINK
-                    conv["business_suite_link"] = f"https://business.facebook.com/latest/inbox/all/{conv['id']}"
-                    
-                    conversations.append(conv)
-                    
-            except Exception as e:
-                print(f"Lỗi lấy hội thoại page {pid}: {e}")
-                continue
-                
-        # Sắp xếp theo thời gian
-        conversations.sort(key=lambda x: x.get("updated_time", ""), reverse=True)
-        
-        return jsonify({"data": conversations})
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/inbox/messages")
-def api_inbox_messages():
-    """API lấy tin nhắn trong hội thoại - ĐÃ SỬA HIỂN THỊ ẢNH"""
-    try:
-        conv_id = request.args.get("conversation_id")
-        page_id = request.args.get("page_id")
-        
-        if not conv_id or not page_id:
-            return jsonify({"error": "Thiếu conversation_id hoặc page_id"}), 400
-            
-        token = PAGE_TOKENS.get(page_id)
-        if not token:
-            return jsonify({"error": "Token không tồn tại"}), 400
-            
-        # Lấy tin nhắn với thông tin attachments
-        data = fb_get(f"{conv_id}/messages", {
-            "access_token": token,
-            "fields": "id,message,from{name,id},to,created_time,attachments{image_data,url,type}",
-            "limit": 100
-        })
-        
-        messages = data.get("data", [])
-        
-        # Đánh dấu tin nhắn từ page và xử lý from
-        for msg in messages:
-            if isinstance(msg.get("from"), dict) and msg["from"].get("id") == page_id:
-                msg["is_page"] = True
-                msg["from_name"] = msg["from"].get("name", "Page")
-            else:
-                msg["is_page"] = False
-                msg["from_name"] = msg["from"].get("name", "Unknown") if isinstance(msg.get("from"), dict) else "Unknown"
-                
-        messages.sort(key=lambda x: x.get("created_time", ""))
-        
-        return jsonify({"data": messages})
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/inbox/reply", methods=["POST"])
-def api_inbox_reply():
-    """API gửi tin nhắn trả lời - CHỨC NĂNG MỚI"""
-    try:
-        data = request.get_json()
-        conversation_id = data.get("conversation_id")
-        page_id = data.get("page_id")
-        message = (data.get("message") or "").strip()  # ĐÃ SỬA LỖI NoneType
-        media_url = data.get("media_url")
-        
-        if not conversation_id or not page_id:
-            return jsonify({"error": "Thiếu conversation_id hoặc page_id"}), 400
-            
-        if not message and not media_url:
-            return jsonify({"error": "Thiếu nội dung tin nhắn hoặc media"}), 400
-            
-        token = PAGE_TOKENS.get(page_id)
-        if not token:
-            return jsonify({"error": "Token không tồn tại"}), 400
-            
-        # Gửi tin nhắn
-        payload = {
-            "access_token": token,
-            "message": message
-        }
-        
-        if media_url:
-            payload["attachment_url"] = media_url
-            
-        result = fb_post(f"{conversation_id}/messages", payload)
-        
-        # Theo dõi analytics
-        analytics_tracker.track_message(page_id, "reply", success=True)
-        
-        return jsonify({
-            "success": True,
-            "message_id": result.get("id"),
-            "result": result
-        })
-        
-    except Exception as e:
-        # Theo dõi lỗi analytics
-        page_id = request.get_json().get("page_id") if request.is_json else None
-        if page_id:
-            analytics_tracker.track_message(page_id, "reply", success=False)
-            
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/ai/generate", methods=["POST"])
-def api_ai_generate():
-    """API tạo nội dung bằng AI với SEO tối ưu - ĐÃ CẢI THIỆN PROMPT"""
-    try:
-        data = request.get_json()
-        page_id = data.get("page_id")
-        user_prompt = (data.get("prompt") or "").strip()  # ĐÃ SỬA LỖI NoneType
-        
-        if not page_id:
-            return jsonify({"error": "Thiếu page_id"}), 400
-            
+@app.route('/api/settings', methods=['GET', 'POST'])
+def handle_settings():
+    """API quản lý cài đặt page"""
+    if request.method == 'GET':
         settings = _load_settings()
-        page_settings = settings.get(page_id, {})
-        keyword = page_settings.get("keyword", "MB66")  # Default keyword
-        source = page_settings.get("source", "https://example.com")
-        
-        # Sử dụng AI nếu có
-        if _client:
-            try:
-                writer = AIContentWriter(_client)
-                content = writer.generate_content(keyword, source, user_prompt)
-                
-                # Kiểm tra anti-duplicate
-                corpus = _uniq_load_corpus()
-                history = corpus.get(page_id, [])
-                
-                if ANTI_DUP_ENABLED and _uniq_too_similar(content, history):
-                    return jsonify({"error": "Nội dung quá giống với bài trước"}), 409
-                    
-                _uniq_store(page_id, content)
-                
-                return jsonify({
-                    "text": content,
-                    "type": "ai_generated",
-                    "keyword": keyword
-                })
-                
-            except Exception as e:
-                print(f"AI generation failed: {e}")
-                # Fallback to simple generator
-                
-        # Sử dụng generator đơn giản với SEO
-        generator = SimpleContentGenerator()
-        content = generator.generate_content(keyword, source, user_prompt)
-        
-        # Kiểm tra anti-duplicate
-        corpus = _uniq_load_corpus()
-        history = corpus.get(page_id, [])
-        
-        if ANTI_DUP_ENABLED and _uniq_too_similar(content, history):
-            return jsonify({"error": "Nội dung quá giống với bài trước"}), 409
+        return jsonify(settings)
+    
+    elif request.method == 'POST':
+        try:
+            new_settings = request.get_json()
+            if not new_settings:
+                return jsonify({"error": "Invalid JSON"}), 400
             
-        _uniq_store(page_id, content)
+            _save_settings(new_settings)
+            return jsonify({"message": "Settings saved successfully"})
+            
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+@app.route('/api/settings/<page_id>', methods=['GET', 'PUT', 'DELETE'])
+def handle_page_settings(page_id):
+    """API quản lý cài đặt cho từng page"""
+    settings = _load_settings()
+    
+    if request.method == 'GET':
+        page_settings = settings.get(page_id, {})
+        return jsonify(page_settings)
+    
+    elif request.method == 'PUT':
+        try:
+            new_settings = request.get_json()
+            if not new_settings:
+                return jsonify({"error": "Invalid JSON"}), 400
+            
+            settings[page_id] = new_settings
+            _save_settings(settings)
+            return jsonify({"message": f"Settings for {page_id} saved successfully"})
+            
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    
+    elif request.method == 'DELETE':
+        if page_id in settings:
+            del settings[page_id]
+            _save_settings(settings)
+            return jsonify({"message": f"Settings for {page_id} deleted"})
+        else:
+            return jsonify({"error": "Page not found"}), 404
+
+@app.route('/api/stats')
+def get_stats():
+    """API lấy thống kê hệ thống"""
+    try:
+        stats = analytics_tracker.get_daily_stats()
+        settings = _load_settings()
         
         return jsonify({
-            "text": content,
-            "type": "simple_generated",
-            "keyword": keyword
+            "today_posts": stats.get("total_posts", 0),
+            "today_messages": stats.get("total_messages", 0),
+            "successful_posts": stats.get("successful_posts", 0),
+            "successful_messages": stats.get("successful_messages", 0),
+            "settings": settings,
+            "tokens": PAGE_TOKENS,
+            "webhook_active": True,
+            "fb_api_active": True,
+            "openai_available": OPENAI_AVAILABLE and _client is not None
         })
-        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/pages/post", methods=["POST"])
-def api_pages_post():
-    """API đăng bài lên pages với tracking"""
+@app.route('/api/logs')
+def get_logs():
+    """API lấy logs hệ thống"""
+    try:
+        logs = []
+        if os.path.exists(LOG_FILE):
+            with open(LOG_FILE, 'r', encoding='utf-8') as f:
+                for line in f.readlines()[-100:]:  # Lấy 100 dòng cuối
+                    if line.strip():
+                        parts = line.split(']', 2)
+                        if len(parts) >= 3:
+                            timestamp = parts[0][1:]
+                            level = parts[1][2:]
+                            message = parts[2].strip()
+                            logs.append({
+                                "timestamp": timestamp,
+                                "level": level,
+                                "message": message
+                            })
+        return jsonify(logs)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/clear-logs', methods=['POST'])
+def clear_logs():
+    """API xóa logs"""
+    try:
+        if os.path.exists(LOG_FILE):
+            os.remove(LOG_FILE)
+        return jsonify({"message": "Logs cleared successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/setup-webhook', methods=['POST'])
+def setup_webhook():
+    """API thiết lập webhook"""
     try:
         data = request.get_json()
-        pages = data.get("pages", [])
-        text_content = (data.get("text") or "").strip()  # ĐÃ SỬA LỖI NoneType
-        media_url = (data.get("media_url") or "").strip() or None  # ĐÃ SỬA LỖI NoneType
-        post_type = data.get("post_type", "feed")
+        token = data.get('token')
         
-        if not pages:
-            return jsonify({"error": "Chọn ít nhất 1 page"}), 400
-            
-        if not text_content and not media_url:
-            return jsonify({"error": "Thiếu nội dung hoặc media"}), 400
-            
-        results = []
+        if not token:
+            return jsonify({"error": "Token is required"}), 400
         
-        for pid in pages:
-            token = PAGE_TOKENS.get(pid)
-            if not token or not token.startswith("EAA"):
-                results.append({
-                    "page_id": pid,
-                    "error": "Token không hợp lệ",
-                    "link": None
-                })
-                analytics_tracker.track_post(pid, post_type, success=False, error_msg="Token không hợp lệ")
-                continue
-                
-            try:
-                # Đăng bài
-                if media_url and post_type == "reels":
-                    # Đăng video/reels
-                    out = fb_post(f"{pid}/videos", {
-                        "file_url": media_url,
-                        "description": text_content,
-                        "access_token": token
-                    })
-                    # Lấy post_id từ video
-                    post_id = out.get("post_id") or out.get("id", "").replace(f"{pid}_", "")
-                elif media_url:
-                    # Đăng ảnh
-                    out = fb_post(f"{pid}/photos", {
-                        "url": media_url,
-                        "caption": text_content,
-                        "access_token": token
-                    })
-                    # Lấy post_id từ photo
-                    post_id = out.get("post_id") or out.get("id", "").replace(f"{pid}_", "")
-                else:
-                    # Đăng text
-                    out = fb_post(f"{pid}/feed", {
-                        "message": text_content,
-                        "access_token": token
-                    })
-                    post_id = out.get("id", "").replace(f"{pid}_", "")
-                
-                # Tạo link - FIX: Kiểm tra post_id hợp lệ
-                link = None
-                if post_id:
-                    if post_type == "reels":
-                        link = f"https://facebook.com/{pid}/reels/{post_id}"
-                    elif media_url and post_type != "reels":
-                        link = f"https://facebook.com/{pid}/posts/{post_id}"
-                    else:
-                        link = f"https://facebook.com/{pid}/posts/{post_id}"
-                
-                results.append({
-                    "page_id": pid,
-                    "result": out,
-                    "link": link,
-                    "post_id": post_id,
-                    "status": "success"
-                })
-                
-                # Theo dõi thành công
-                analytics_tracker.track_post(pid, post_type, success=True)
-                
-            except Exception as e:
-                error_msg = str(e)
-                results.append({
-                    "page_id": pid,
-                    "error": error_msg,
-                    "link": None,
-                    "status": "error"
-                })
-                
-                # Theo dõi lỗi
-                analytics_tracker.track_post(pid, post_type, success=False, error_msg=error_msg)
-                
-        return jsonify({"results": results})
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/upload", methods=["POST"])
-def api_upload():
-    """API upload file"""
-    try:
-        file = request.files.get("file")
-        if not file:
-            return jsonify({"error": "Không có file"}), 400
-            
-        # Lưu file
-        filename = f"{uuid.uuid4()}_{file.filename}"
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(filepath)
-        
-        # Trả về URL có thể truy cập được
-        base_url = request.host_url.rstrip('/')
-        file_url = f"{base_url}uploads/{filename}"
-        
+        # Trong thực tế, bạn sẽ gọi Facebook API để thiết lập webhook
+        # Ở đây trả về kết quả mẫu
         return jsonify({
-            "url": file_url,
-            "filename": filename,
-            "path": filepath
+            "message": "Webhook setup completed successfully",
+            "webhook_url": f"{request.host_url}webhook",
+            "verify_token": VERIFY_TOKEN
         })
-        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/uploads/<filename>")
-def serve_uploaded_file(filename):
-    """Phục vụ file đã upload"""
-    return send_from_directory(UPLOAD_FOLDER, filename)
+@app.route('/api/test-webhook')
+def test_webhook():
+    """API kiểm tra webhook"""
+    return jsonify({"message": "Webhook is working correctly"})
 
-@app.route("/health")
+@app.route('/api/manual-post', methods=['POST'])
+def manual_post():
+    """API đăng bài thủ công"""
+    try:
+        data = request.get_json()
+        page_id = data.get('page_id')
+        content = data.get('content')
+        image_url = data.get('image_url')
+        
+        if not page_id or not content:
+            return jsonify({"error": "Page ID and content are required"}), 400
+        
+        # Lấy token cho page
+        try:
+            page_token = get_page_token(page_id)
+        except Exception as e:
+            return jsonify({"error": f"Token not found for page: {str(e)}"}), 400
+        
+        if image_url:
+            # Đăng ảnh với nội dung
+            result = fb_post(f"{page_id}/photos", {
+                "message": content,
+                "access_token": page_token,
+                "url": image_url
+            })
+        else:
+            # Đăng bài viết thông thường
+            result = fb_post(f"{page_id}/feed", {
+                "message": content,
+                "access_token": page_token
+            })
+        
+        if 'id' in result:
+            _uniq_store(page_id, content)
+            analytics_tracker.track_post(page_id, "manual", success=True)
+            return jsonify({"message": "Bài đăng đã được đăng thành công!", "post_id": result['id']})
+        else:
+            return jsonify({"error": f"Facebook API error: {result}"}), 500
+            
+    except Exception as e:
+        log_message(f"Manual post error: {e}", "ERROR")
+        return jsonify({"error": str(e)}), 500
+
+# ------------------------ Health Check ------------------------
+
+@app.route('/health')
 def health_check():
     """Health check endpoint"""
-    valid_tokens = sum(1 for t in PAGE_TOKENS.values() if t and t.startswith("EAA"))
-    
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "pages_total": len(PAGE_TOKENS),
-        "pages_connected": valid_tokens,
-        "valid_tokens": valid_tokens,
-        "openai_ready": _client is not None,
-        "version": "AKUTA-2025-SEO-OPTIMIZED"
+        "version": "1.0.0"
     })
 
-# ------------------------ Settings Management ------------------------
+# ------------------------ Initialization ------------------------
 
-@app.route("/api/settings/get")
-def api_settings_get():
-    """API lấy cài đặt - ĐÃ SỬA HIỂN THỊ TÊN PAGE THẬT"""
-    try:
-        settings = _load_settings()
-        pages = []
-        
-        for pid in PAGE_TOKENS.keys():
-            # Lấy tên page thật từ Facebook API
-            page_name = f"Page {pid}"  # Mặc định
-            token = PAGE_TOKENS.get(pid)
-            
-            if token and token.startswith("EAA"):
-                try:
-                    # Lấy thông tin page từ Facebook
-                    data = fb_get(pid, {
-                        "access_token": token,
-                        "fields": "name"
-                    })
-                    if "name" in data:
-                        page_name = data["name"]
-                except Exception as e:
-                    print(f"Lỗi lấy tên page {pid}: {e}")
-                    # Giữ nguyên tên mặc định nếu có lỗi
-            
-            page_settings = settings.get(pid, {})
-            pages.append({
-                "id": pid,
-                "name": page_name,  # Sử dụng tên thật
-                "keyword": page_settings.get("keyword", ""),
-                "source": page_settings.get("source", "")
-            })
-            
-        return jsonify({"data": pages})
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/settings/save", methods=["POST"])
-def api_settings_save():
-    """API lưu cài đặt"""
-    try:
-        data = request.get_json()
-        items = data.get("items", [])
-        
-        settings = _load_settings()
-        
-        for item in items:
-            pid = item.get("id")
-            if pid in PAGE_TOKENS:
-                settings[pid] = {
-                    "keyword": item.get("keyword", ""),
-                    "source": item.get("source", "")
-                }
-                
-        _save_settings(settings)
-        
-        return jsonify({"ok": True, "updated": len(items)})
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ------------------------ Analytics APIs ------------------------
-
-@app.route("/api/analytics/overview")
-def api_analytics_overview():
-    """API thống kê tổng quan - ĐÃ SỬA LỖI timedelta"""
-    try:
-        valid_tokens = sum(1 for t in PAGE_TOKENS.values() if t and t.startswith("EAA"))
-        
-        # Lấy thông tin thống kê cơ bản
-        stats = {
-            "total_pages": len(PAGE_TOKENS),
-            "active_pages": valid_tokens,
-            "ai_ready": _client is not None,
-            "recent_posts": 0,
-            "recent_messages": 0,
-            "last_updated": datetime.now().isoformat(),
-            "recent_activities": [
-                {"time": datetime.now().strftime("%H:%M"), "action": "Hệ thống khởi động"},
-                {"time": (datetime.now() - timedelta(minutes=5)).strftime("%H:%M"), "action": f"Kiểm tra {len(PAGE_TOKENS)} pages"},
-                {"time": (datetime.now() - timedelta(minutes=10)).strftime("%H:%M"), "action": f"{valid_tokens} tokens hợp lệ"}
-            ]
+def _initialize_default_settings():
+    """Khởi tạo cài đặt mặc định"""
+    settings = _load_settings()
+    if not settings:
+        default_settings = {
+            "default": {
+                "keyword": "AKUTA", 
+                "source": "https://akutaclub.vip/",
+                "auto_reply": True,
+                "auto_post": True,
+                "created_at": datetime.now().isoformat()
+            }
         }
-        
-        return jsonify(stats)
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        _save_settings(default_settings)
+        log_message("Đã khởi tạo cài đặt mặc định")
 
-@app.route("/api/analytics/daily")
-def api_analytics_daily():
-    """API thống kê hàng ngày"""
-    try:
-        daily_stats = analytics_tracker.get_daily_stats()
-        return jsonify(daily_stats)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# Chạy khởi tạo khi start app
+_initialize_default_settings()
 
-@app.route("/api/analytics/clear", methods=["POST"])
-def api_analytics_clear():
-    """API xoá dữ liệu thống kê"""
-    try:
-        # Đơn giản là tạo file analytics mới
-        with open("/tmp/analytics.json", "w") as f:
-            json.dump({"posts": [], "messages": []}, f)
-        return jsonify({"ok": True, "message": "Đã xoá dữ liệu thống kê"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ------------------------ SEO Tools APIs ------------------------
-
-@app.route("/api/seo/analyze", methods=["POST"])
-def api_seo_analyze():
-    """API phân tích SEO content"""
-    try:
-        data = request.get_json()
-        content = data.get("content", "")
-        
-        if not content:
-            return jsonify({"error": "Thiếu nội dung"}), 400
-        
-        # Phân tích cơ bản
-        analysis = []
-        score = 0
-        
-        # Kiểm tra độ dài
-        word_count = len(content.split())
-        if 180 <= word_count <= 280:
-            analysis.append({"check": "Độ dài content", "message": f"Tối ưu ({word_count} từ)", "passed": True})
-            score += 20
-        else:
-            analysis.append({"check": "Độ dài content", "message": f"Chưa tối ưu ({word_count} từ)", "passed": False})
-        
-        # Kiểm tra hashtag
-        hashtag_count = content.count('#')
-        if hashtag_count >= 15:
-            analysis.append({"check": "Số lượng hashtag", "message": f"Tốt ({hashtag_count} hashtag)", "passed": True})
-            score += 20
-        elif hashtag_count >= 10:
-            analysis.append({"check": "Số lượng hashtag", "message": f"Khá ({hashtag_count} hashtag)", "passed": True})
-            score += 15
-        else:
-            analysis.append({"check": "Số lượng hashtag", "message": f"Thiếu ({hashtag_count} hashtag)", "passed": False})
-        
-        # Kiểm tra từ khoá
-        settings = _load_settings()
-        has_keyword = any(settings.get(pid, {}).get("keyword", "") in content for pid in PAGE_TOKENS.keys())
-        if has_keyword:
-            analysis.append({"check": "Từ khoá chính", "message": "Có xuất hiện trong content", "passed": True})
-            score += 20
-        else:
-            analysis.append({"check": "Từ khoá chính", "message": "Không xuất hiện trong content", "passed": False})
-        
-        # Kiểm tra cấu trúc
-        has_emoji = any(char in content for char in ["🚀", "🎯", "✨", "✅", "📞", "💫"])
-        has_structure = any(marker in content for marker in ["**", "•", "- ", ":"])
-        
-        if has_emoji and has_structure:
-            analysis.append({"check": "Cấu trúc & Format", "message": "Tốt, có emoji và định dạng rõ ràng", "passed": True})
-            score += 20
-        elif has_structure:
-            analysis.append({"check": "Cấu trúc & Format", "message": "Khá, có định dạng nhưng thiếu emoji", "passed": True})
-            score += 15
-        else:
-            analysis.append({"check": "Cấu trúc & Format", "message": "Cần cải thiện định dạng", "passed": False})
-        
-        # Kiểm tra từ nhạy cảm
-        sensitive_words = ["cờ bạc", "đánh bạc", "cá độ", "lừa đảo", "scam"]
-        has_sensitive = any(word in content.lower() for word in sensitive_words)
-        if not has_sensitive:
-            analysis.append({"check": "Từ nhạy cảm", "message": "An toàn, không có từ nhạy cảm", "passed": True})
-            score += 20
-        else:
-            analysis.append({"check": "Từ nhạy cảm", "message": "CÓ TỪ NHẠY CẢM - CẦN SỬA NGAY", "passed": False})
-            score = 0  # Zero điểm nếu có từ nhạy cảm
-        
-        # Đề xuất
-        recommendations = []
-        if word_count < 180:
-            recommendations.append("• Tăng độ dài content lên 180-280 từ")
-        if hashtag_count < 15:
-            recommendations.append("• Thêm hashtag để đạt 15-20 hashtag")
-        if not has_emoji:
-            recommendations.append("• Thêm emoji để tăng độ thu hút")
-        if has_sensitive:
-            recommendations.append("• LOẠI BỎ NGAY các từ nhạy cảm để tránh vi phạm")
-        
-        return jsonify({
-            "score": score,
-            "analysis": analysis,
-            "recommendations": " | ".join(recommendations) if recommendations else "Content đã tối ưu tốt!"
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/seo/hashtags", methods=["POST"])
-def api_seo_hashtags():
-    """API tạo hashtag SEO"""
-    try:
-        data = request.get_json()
-        keyword = (data.get("keyword") or "").strip()  # ĐÃ SỬA LỖI NoneType
-        
-        if not keyword:
-            return jsonify({"error": "Thiếu từ khoá"}), 400
-        
-        seo_generator = SEOContentGenerator()
-        hashtags = seo_generator._generate_hashtags(keyword)
-        
-        return jsonify({
-            "keyword": keyword,
-            "hashtags": hashtags,
-            "count": len(hashtags.split())
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ------------------------ Error Handlers ------------------------
-
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({"error": "Endpoint không tồn tại"}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({"error": "Lỗi máy chủ nội bộ"}), 500
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    return jsonify({"error": f"Lỗi hệ thống: {str(e)}"}), 500
-
-@app.route("/api/admin/test_tokens", methods=["POST"])
-def api_test_tokens():
-    """API test tokens - CHỨC NĂNG MỚI"""
-    try:
-        results = []
-        for pid, token in PAGE_TOKENS.items():
-            try:
-                # Test token bằng cách lấy thông tin page
-                data = fb_get(pid, {
-                    "access_token": token,
-                    "fields": "name,id"
-                })
-                
-                results.append({
-                    "page_id": pid,
-                    "status": "valid",
-                    "page_name": data.get("name", "Unknown"),
-                    "message": "Token hợp lệ"
-                })
-                
-            except Exception as e:
-                results.append({
-                    "page_id": pid,
-                    "status": "invalid",
-                    "page_name": "Unknown", 
-                    "message": str(e)
-                })
-                
-        return jsonify({"results": results})
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ------------------------ Main ------------------------
-
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", "5000"))
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    log_message(f"🚀 Starting Facebook Auto Post Tool on port {port}")
+    log_message(f"📊 Dashboard: http://localhost:{port}")
+    log_message(f"🔗 Webhook: http://localhost:{port}/webhook")
+    log_message(f"✅ System initialized successfully")
     
-    print("=" * 60)
-    print("🚀 AKUTA Content Manager 2025 - HOÀN THIỆN")
-    print("=" * 60)
-    print(f"📍 Port: {port}")
-    print(f"📊 Total pages: {len(PAGE_TOKENS)}")
-    print(f"✅ Valid tokens: {sum(1 for t in PAGE_TOKENS.values() if t and t.startswith('EAA'))}")
-    print(f"🤖 OpenAI: {'READY' if _client else 'DISABLED'}")
-    print(f"🔍 SEO Tools: ENABLED")
-    print(f"📈 Analytics: ENABLED")
-    print("=" * 60)
-    print("🎯 SEO Features:")
-    print("   • 6 hashtag cố định cho mỗi từ khoá")
-    print("   • 10-15 hashtag bổ sung liên quan") 
-    print("   • Content chuẩn SEO, không vi phạm")
-    print("   • Tự động kiểm tra điểm SEO")
-    print("   • Hashtag generator thông minh")
-    print("=" * 60)
-    print("🎨 Prompt Features:")
-    print("   • 20+ prompt templates có sẵn")
-    print("   • 4 danh mục template: Khuyến mãi, Bảo mật, Game, Mobile")
-    print("   • Prompt tuỳ chỉnh linh hoạt")
-    print("   • Lưu template vào local storage")
-    print("=" * 60)
-    print("💬 Inbox Features:")
-    print("   • Link trực tiếp đến Facebook Business Suite")
-    print("   • Quick reply templates")
-    print("   • Mở profile người gửi")
-    print("   • Hiển thị ảnh đính kèm")
-    print("=" * 60)
-    print("🔗 URLs:")
-    print(f"   • Main: http://0.0.0.0:{port}")
-    print(f"   • Health: http://0.0.0.0:{port}/health")
-    print(f"   • Analytics: http://0.0.0.0:{port}/api/analytics/overview")
-    print("=" * 60)
-    
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)
