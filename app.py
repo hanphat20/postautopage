@@ -355,7 +355,7 @@ class AIContentWriter:
                 - Tự nhiên, không spam, không cảm giác quảng cáo quá lố
                 
                 **HASHTAG (QUAN TRỌNG):**
-                BẮT BUỘC phải có 6 hashtag chính với từ khóa "{keyword}":
+                BẮT BUỐC phải có 6 hashtag chính với từ khóa "{keyword}":
                 #{keyword} #LinkChínhThức{keyword} #{keyword}AnToàn #HỗTrợLấyLạiTiền{keyword} #RútTiền{keyword} #MởKhóaTàiKhoản{keyword}
                 
                 Và thêm 10-15 hashtag phụ liên quan đến giải trí, game, casino online.
@@ -434,7 +434,9 @@ def _uniq_save_corpus(corpus: dict):
 
 def _uniq_norm(s: str) -> str:
     """Chuẩn hóa chuỗi - ĐÃ SỬA LỖI NoneType"""
-    s = str(s or "")  # Đảm bảo luôn là string
+    if s is None:
+        return ""
+    s = str(s)
     s = re.sub(r"\s+", " ", s.strip())
     s = re.sub(r"[^\w\s]", "", s)
     return s.lower()
@@ -1234,11 +1236,9 @@ Ví dụ:
         let messageContent = msg.message || '(Không có nội dung văn bản)';
         
         // Hiển thị ảnh nếu có
-        if (msg.attachments && msg.attachments.data && msg.attachments.data.length > 0) {
-            msg.attachments.data.forEach(attachment => {
-                if (attachment.type === 'image' && attachment.image_data) {
-                    messageContent += `<br><img src="${attachment.image_data.url}" class="message-image" alt="Hình ảnh">`;
-                } else if (attachment.type === 'image' && attachment.url) {
+        if (msg.attachments && msg.attachments.length > 0) {
+            msg.attachments.forEach(attachment => {
+                if (attachment.type === 'image' && attachment.url) {
                     messageContent += `<br><img src="${attachment.url}" class="message-image" alt="Hình ảnh">`;
                 }
             });
@@ -1841,12 +1841,19 @@ def api_inbox_conversations():
                     if conv.get("senders") and conv["senders"].get("data"):
                         senders_info = [sender["name"] for sender in conv["senders"]["data"]]
                     
+                    # Lấy tên page
+                    try:
+                        page_data = fb_get(pid, {
+                            "access_token": token,
+                            "fields": "name"
+                        })
+                        page_name = page_data.get("name", f"Page {pid}")
+                    except:
+                        page_name = f"Page {pid}"
+                    
                     conv["page_id"] = pid
                     conv["senders_list"] = senders_info
                     conv["senders_text"] = ", ".join(senders_info) if senders_info else "Không có thông tin"
-                    
-                    # Lấy tên page từ thông tin đã lưu
-                    page_name = f"Page {pid}"
                     conv["page_name"] = page_name
                     conversations.append(conv)
                     
@@ -1886,29 +1893,56 @@ def api_inbox_messages():
         messages = data.get("data", [])
         
         # Đánh dấu tin nhắn từ page và xử lý from
+        processed_messages = []
         for msg in messages:
-            if isinstance(msg.get("from"), dict) and msg["from"].get("id") == page_id:
-                msg["is_page"] = True
-                msg["from_name"] = msg["from"].get("name", "Page")
-            else:
-                msg["is_page"] = False
-                msg["from_name"] = msg["from"].get("name", "Unknown") if isinstance(msg.get("from"), dict) else "Unknown"
-                
-        messages.sort(key=lambda x: x.get("created_time", ""))
+            # Xử lý thông tin người gửi
+            from_info = msg.get("from", {})
+            from_id = from_info.get("id") if isinstance(from_info, dict) else None
+            from_name = from_info.get("name") if isinstance(from_info, dict) else "Unknown"
+            
+            # Xác định có phải page gửi không
+            is_page = (from_id == page_id)
+            
+            # Xử lý attachments
+            attachments_info = []
+            if msg.get("attachments") and msg["attachments"].get("data"):
+                for att in msg["attachments"]["data"]:
+                    if att.get("type") == "image":
+                        attachment_data = {
+                            "type": "image",
+                            "url": att.get("url")
+                        }
+                        if att.get("image_data"):
+                            attachment_data["url"] = att["image_data"].get("url")
+                        attachments_info.append(attachment_data)
+            
+            processed_msg = {
+                "id": msg.get("id"),
+                "message": msg.get("message", ""),
+                "created_time": msg.get("created_time"),
+                "from_id": from_id,
+                "from_name": from_name,
+                "is_page": is_page,
+                "attachments": attachments_info
+            }
+            processed_messages.append(processed_msg)
         
-        return jsonify({"data": messages})
+        # Sắp xếp theo thời gian (cũ nhất trước)
+        processed_messages.sort(key=lambda x: x.get("created_time", ""))
+        
+        return jsonify({"data": processed_messages})
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/inbox/reply", methods=["POST"])
 def api_inbox_reply():
-    """API gửi tin nhắn trả lời - CHỨC NĂNG MỚI"""
+    """API gửi tin nhắn trả lời - ĐÃ SỬA LỖI"""
     try:
         data = request.get_json()
         conversation_id = data.get("conversation_id")
         page_id = data.get("page_id")
-        message = (data.get("message") or "").strip()  # ĐÃ SỬA LỖI NoneType
+        message = (data.get("message") or "").strip()
         media_url = data.get("media_url")
         
         if not conversation_id or not page_id:
@@ -1923,10 +1957,12 @@ def api_inbox_reply():
             
         # Gửi tin nhắn
         payload = {
-            "access_token": token,
-            "message": message
+            "access_token": token
         }
         
+        if message:
+            payload["message"] = message
+            
         if media_url:
             payload["attachment_url"] = media_url
             
@@ -1955,7 +1991,7 @@ def api_ai_generate():
     try:
         data = request.get_json()
         page_id = data.get("page_id")
-        user_prompt = (data.get("prompt") or "").strip()  # ĐÃ SỬA LỖI NoneType
+        user_prompt = (data.get("prompt") or "").strip()
         
         if not page_id:
             return jsonify({"error": "Thiếu page_id"}), 400
@@ -2018,8 +2054,8 @@ def api_pages_post():
     try:
         data = request.get_json()
         pages = data.get("pages", [])
-        text_content = (data.get("text") or "").strip()  # ĐÃ SỬA LỖI NoneType
-        media_url = (data.get("media_url") or "").strip() or None  # ĐÃ SỬA LỖI NoneType
+        text_content = (data.get("text") or "").strip()
+        media_url = (data.get("media_url") or "").strip() or None
         post_type = data.get("post_type", "feed")
         
         if not pages:
@@ -2042,46 +2078,52 @@ def api_pages_post():
                 continue
                 
             try:
-                # Đăng bài
+                post_result = None
+                post_id = None
+                
                 if media_url and post_type == "reels":
                     # Đăng video/reels
-                    out = fb_post(f"{pid}/videos", {
+                    post_result = fb_post(f"{pid}/videos", {
                         "file_url": media_url,
                         "description": text_content,
                         "access_token": token
                     })
-                    # Lấy post_id từ video
-                    post_id = out.get("post_id") or out.get("id", "").replace(f"{pid}_", "")
+                    post_id = post_result.get("id")
+                    
                 elif media_url:
                     # Đăng ảnh
-                    out = fb_post(f"{pid}/photos", {
+                    post_result = fb_post(f"{pid}/photos", {
                         "url": media_url,
-                        "caption": text_content,
-                        "access_token": token
-                    })
-                    # Lấy post_id từ photo
-                    post_id = out.get("post_id") or out.get("id", "").replace(f"{pid}_", "")
-                else:
-                    # Đăng text
-                    out = fb_post(f"{pid}/feed", {
                         "message": text_content,
                         "access_token": token
                     })
-                    post_id = out.get("id", "").replace(f"{pid}_", "")
+                    post_id = post_result.get("post_id") or post_result.get("id")
+                    
+                else:
+                    # Đăng text
+                    post_result = fb_post(f"{pid}/feed", {
+                        "message": text_content,
+                        "access_token": token
+                    })
+                    post_id = post_result.get("id")
                 
-                # Tạo link - FIX: Kiểm tra post_id hợp lệ
+                # Tạo link bài đăng
                 link = None
                 if post_id:
+                    # Xử lý post_id
+                    if "_" in str(post_id):
+                        post_id_parts = str(post_id).split("_")
+                        if len(post_id_parts) > 1:
+                            post_id = post_id_parts[1]
+                    
                     if post_type == "reels":
                         link = f"https://facebook.com/{pid}/reels/{post_id}"
-                    elif media_url and post_type != "reels":
-                        link = f"https://facebook.com/{pid}/posts/{post_id}"
                     else:
                         link = f"https://facebook.com/{pid}/posts/{post_id}"
                 
                 results.append({
                     "page_id": pid,
-                    "result": out,
+                    "result": post_result,
                     "link": link,
                     "post_id": post_id,
                     "status": "success"
@@ -2109,29 +2151,45 @@ def api_pages_post():
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
-    """API upload file"""
+    """API upload file - ĐÃ SỬA LỖI"""
     try:
-        file = request.files.get("file")
-        if not file:
+        if 'file' not in request.files:
             return jsonify({"error": "Không có file"}), 400
             
-        # Lưu file
-        filename = f"{uuid.uuid4()}_{file.filename}"
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "Không có file được chọn"}), 400
+            
+        # Kiểm tra định dạng file
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'mov', 'avi'}
+        file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+        
+        if file_ext not in allowed_extensions:
+            return jsonify({"error": f"Định dạng file không được hỗ trợ. Cho phép: {', '.join(allowed_extensions)}"}), 400
+        
+        # Tạo tên file an toàn
+        filename = f"{uuid.uuid4().hex}_{file.filename}"
         filepath = os.path.join(UPLOAD_FOLDER, filename)
+        
+        # Đảm bảo thư mục tồn tại
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        
+        # Lưu file
         file.save(filepath)
         
-        # Trả về URL có thể truy cập được
+        # Tạo URL
         base_url = request.host_url.rstrip('/')
-        file_url = f"{base_url}uploads/{filename}"
+        file_url = f"{base_url}/uploads/{filename}"
         
         return jsonify({
+            "success": True,
             "url": file_url,
             "filename": filename,
             "path": filepath
         })
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Lỗi upload: {str(e)}"}), 500
 
 @app.route("/uploads/<filename>")
 def serve_uploaded_file(filename):
@@ -2357,7 +2415,7 @@ def api_seo_hashtags():
     """API tạo hashtag SEO"""
     try:
         data = request.get_json()
-        keyword = (data.get("keyword") or "").strip()  # ĐÃ SỬA LỖI NoneType
+        keyword = (data.get("keyword") or "").strip()
         
         if not keyword:
             return jsonify({"error": "Thiếu từ khoá"}), 400
