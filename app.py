@@ -212,6 +212,15 @@ class SEOContentGenerator:
             "#MởKhóaTàiKhoản{keyword}"
         ]
         
+        # Thêm hashtag theo nhu cầu vấn đề của khách hàng
+        self.problem_hashtags = [
+            "#HỗTrợRútTiền", "#NạpTiềnKhôngLênĐiểm", "#BịKhóaTàiKhoản", "#SaiThôngTinHọTên",
+            "#MấtTiền", "#MấtĐiểmSố", "#BịHackTàiKhoản", "#BảoMậtThôngTin", "#VàoSaiLink",
+            "#LinkChínhThức", "#HỗTrợKháchHàng", "#GiảiQuyếtVấnĐề", "#KhắcPhụcSựCố",
+            "#TàiKhoảnBịKhóa", "#KhôngRútĐượcTiền", "#LỗiNạpTiền", "#QuênMậtKhẩu",
+            "#BảoMật2Lớp", "#XácMinhDanhTính", "#KíchHoạtTàiKhoản"
+        ]
+        
         self.additional_hashtags = {
             "casino": [
                 "#GameĐổiThưởng", "#CasinoOnline", "#CáCượcTrựcTuyến", "#NhàCáiUyTín",
@@ -231,9 +240,9 @@ class SEOContentGenerator:
         }
     
     def generate_seo_content(self, keyword, source, prompt=""):
-        """Tạo nội dung chuẩn SEO với cấu trúc mới"""
+        """Tạo nội dung chuẩn SEO với cấu trúc mới - ĐÃ CẢI THIỆN"""
         
-        # Base content template với cấu trúc mới
+        # Base content template với cấu trúc mới - TẬP TRUNG VÀO HỖ TRỢ KHÁCH HÀNG
         base_content = f"""🎯 {keyword} - NỀN TẢNG GIẢI TRÍ ĐỈNH CAO 2025
 
 #{keyword} ➡️ {source}
@@ -255,12 +264,27 @@ Khám phá thế giới giải trí trực tuyến đẳng cấp với {keyword}
 ⭐ VÉ QUAY MAY MẮN TRỊ GIÁ 10 TRIỆU ĐỒNG
 ⭐ COMBO QUÀ TẶNG ĐỘC QUYỀN cho thành viên VIP
 
-📞 **HỖ TRỢ KHÁCH HÀNG CHUYÊN NGHIỆP:**
+🚨 **HỖ TRỢ KHẨN CẤP - GIẢI QUYẾT NGAY TRONG 5 PHÚT:**
+🔸 HỖ TRỢ RÚT TIỀN NHANH - Xử lý ngay khi có yêu cầu
+🔸 NẠP TIỀN KHÔNG LÊN ĐIẾM? - Liên hệ ngay để được cộng điểm ngay lập tức
+🔸 BỊ KHÓA TÀI KHOẢN? - Mở khóa tức thì sau xác minh
+🔸 SAI THÔNG TIN HỌ TÊN? - Chỉnh sửa ngay trong 3 phút
+🔸 MẤT TIỀN, MẤT ĐIỂM SỐ? - Truy vết và hoàn trả 100%
+🔸 BỊ HACK TÀI KHOẢN? - Khôi phục và bảo mật ngay lập tức
+🔸 BẢO MẬT THÔNG TIN - Đảm bảo an toàn tuyệt đối dữ liệu
+🔸 VÀO SAI LINK? - Sử dụng link chính thức: {source}
+
+📞 **HỖ TRỢ KHÁCH HÀNG CHUYÊN NGHIỆP 24/7:**
 • Hotline: 0363269604 (Hỗ trợ 24/7 kể cả ngày lễ)
 • Telegram: @cattien999
 • Thời gian làm việc: Tất cả các ngày trong tuần
 
-💫 ĐĂNG KÝ NGAY để không bỏ lỡ cơ hội trúng thưởng SIÊU KHỦNG!
+💫 ĐĂNG KÝ NGAY để không bỏ lỡ cơ hội trúng thưởng SIÊU KHỦNG và trải nghiệm dịch vụ hỗ trợ đỉnh cao!
+
+🔒 **LƯU Ý QUAN TRỌNG:**
+• CHỈ sử dụng link chính thức: {source} để đảm bảo an toàn
+• Không chia sẻ thông tin tài khoản với bất kỳ ai
+• Liên hệ ngay khi gặp sự cố để được giải quyết nhanh nhất
 
 {self._generate_hashtags(keyword)}
 """
@@ -272,20 +296,23 @@ Khám phá thế giới giải trí trực tuyến đẳng cấp với {keyword}
         return base_content
     
     def _generate_hashtags(self, keyword):
-        """Tạo hashtag SEO tối ưu"""
+        """Tạo hashtag SEO tối ưu với focus vào vấn đề khách hàng"""
         # Base hashtags (6 hashtag cố định theo từ khóa của page)
         base_tags = [tag.format(keyword=keyword) for tag in self.base_hashtags]
         
-        # Additional hashtags (chọn ngẫu nhiên 10-15 hashtag)
+        # Hashtag vấn đề khách hàng (ưu tiên)
+        problem_tags = random.sample(self.problem_hashtags, min(10, len(self.problem_hashtags)))
+        
+        # Additional hashtags (chọn ngẫu nhiên 8-12 hashtag)
         all_additional = (
             self.additional_hashtags["casino"] + 
             self.additional_hashtags["entertainment"] + 
             self.additional_hashtags["general"]
         )
-        selected_additional = random.sample(all_additional, min(12, len(all_additional)))
+        selected_additional = random.sample(all_additional, min(10, len(all_additional)))
         
-        # Kết hợp tất cả hashtag
-        all_hashtags = base_tags + selected_additional
+        # Kết hợp tất cả hashtag - ưu tiên problem tags
+        all_hashtags = base_tags + problem_tags + selected_additional
         
         # Đảm bảo không trùng lặp
         unique_hashtags = list(dict.fromkeys(all_hashtags))
@@ -298,7 +325,7 @@ class AIContentWriter:
         self.seo_generator = SEOContentGenerator()
         
     def generate_content(self, keyword, source, user_prompt=""):
-        """Tạo nội dung bằng OpenAI với tối ưu SEO"""
+        """Tạo nội dung bằng OpenAI với tối ưu SEO - ĐÃ CẢI THIỆN PROMPT"""
         try:
             # Xây dựng prompt linh hoạt dựa trên user input
             if user_prompt:
@@ -311,9 +338,21 @@ class AIContentWriter:
                 
                 **THÔNG TIN CƠ BẢN:**
                 - Từ khóa: {keyword}
-                - Link: {source}
+                - Link CHÍNH THỨC: {source}
                 - Độ dài: 180-280 từ
                 - Ngôn ngữ: Tiếng Việt tự nhiên, thu hút
+                
+                **TRỌNG TÂM BÀI VIẾT - BẮT BUỘC PHẢI CÓ:**
+                - Nhấn mạnh đây là LINK CHÍNH THỨC: {source}
+                - Tập trung vào các vấn đề khách hàng thường gặp và giải pháp:
+                  * Hỗ trợ rút tiền nhanh chóng
+                  * Xử lý nạp tiền không lên điểm
+                  * Mở khóa tài khoản bị khóa
+                  * Sửa thông tin họ tên sai
+                  * Giải quyết mất tiền, mất điểm số
+                  * Khắc phục tài khoản bị hack
+                  * Bảo mật thông tin tài khoản
+                  * Hướng dẫn vào link chính thức
                 
                 **THÔNG TIN LIÊN HỆ CỐ ĐỊNH (BẮT BUỘC):**
                 • Hotline: 0363269604 (Hỗ trợ 24/7 kể cả ngày lễ)
@@ -324,12 +363,12 @@ class AIContentWriter:
                 BẮT BUỘC phải có 6 hashtag chính với từ khóa "{keyword}":
                 #{keyword} #LinkChínhThức{keyword} #{keyword}AnToàn #HỗTrợLấyLạiTiền{keyword} #RútTiền{keyword} #MởKhóaTàiKhoản{keyword}
                 
-                Và thêm 10-15 hashtag phụ liên quan đến giải trí, game, casino online.
+                Và thêm 10-15 hashtag phụ về các vấn đề hỗ trợ khách hàng: HỗTrợRútTiền, NạpTiềnKhôngLênĐiểm, BịKhóaTàiKhoản, SaiThôngTinHọTên, MấtTiền, MấtĐiểmSố, BịHackTàiKhoản, BảoMậtThôngTin, VàoSaiLink, LinkChínhThức, HỗTrợKháchHàng, GiảiQuyếtVấnĐề
                 
-                Hãy kết hợp yêu cầu của người dùng với thông tin cố định trên để tạo nội dung hoàn chỉnh.
+                Hãy kết hợp yêu cầu của người dùng với thông tin cố định trên để tạo nội dung hoàn chỉnh, tập trung vào hỗ trợ khách hàng.
                 """
             else:
-                # Prompt mặc định nếu không có user prompt
+                # Prompt mặc định nếu không có user prompt - ĐÃ CẢI THIỆN
                 custom_prompt = f"""
                 Hãy tạo một bài đăng Facebook CHUẨN SEO về {keyword} với các yêu cầu:
                 
@@ -340,8 +379,21 @@ class AIContentWriter:
                 - Cấu trúc: 
                   • Dòng 1: Tiêu đề hấp dẫn với icon 🎯
                   • Dòng 2: #{keyword} ➡️ {source}
-                  • Giới thiệu ngắn → Điểm nổi bật → Ưu đãi → Thông tin liên hệ
-                - Link: {source}
+                  • Giới thiệu ngắn → Điểm nổi bật → Hỗ trợ khách hàng → Ưu đãi → Thông tin liên hệ
+                - Link CHÍNH THỨC: {source}
+                
+                **TRỌNG TÂM QUAN TRỌNG - PHẢI NHẤN MẠNH:**
+                - ĐÂY LÀ LINK CHÍNH THỨC: {source} - KHÔNG sử dụng link khác
+                - Hỗ trợ giải quyết mọi vấn đề khách hàng trong 5-10 phút
+                - Các vấn đề thường gặp và cách giải quyết:
+                  * Rút tiền nhanh chóng, xử lý ngay lập tức
+                  * Nạp tiền không lên điểm - cộng điểm ngay
+                  * Tài khoản bị khóa - mở khóa tức thì
+                  * Sai thông tin họ tên - chỉnh sửa ngay
+                  * Mất tiền, mất điểm - truy vết và hoàn trả
+                  * Tài khoản bị hack - khôi phục và bảo mật
+                  * Bảo mật thông tin - an toàn tuyệt đối
+                  * Vào sai link - hướng dẫn link chính thức
                 
                 **THÔNG TIN LIÊN HỆ CỐ ĐỊNH (BẮT BUỘC):**
                 • Hotline: 0363269604 (Hỗ trợ 24/7 kể cả ngày lễ)
@@ -354,12 +406,13 @@ class AIContentWriter:
                 - Tập trung vào "giải trí", "trò chơi", "trải nghiệm"
                 - Nhấn mạnh yếu tố BẢO MẬT, UY TÍN, HỖ TRỢ 24/7
                 - Tự nhiên, không spam, không cảm giác quảng cáo quá lố
+                - PHẢI nhắc đến LINK CHÍNH THỨC {source} ít nhất 2 lần
                 
                 **HASHTAG (QUAN TRỌNG):**
                 BẮT BUỘC phải có 6 hashtag chính với từ khóa "{keyword}":
                 #{keyword} #LinkChínhThức{keyword} #{keyword}AnToàn #HỗTrợLấyLạiTiền{keyword} #RútTiền{keyword} #MởKhóaTàiKhoản{keyword}
                 
-                Và thêm 10-15 hashtag phụ liên quan đến giải trí, game, casino online.
+                Và thêm 10-15 hashtag về hỗ trợ khách hàng: #HỗTrợRútTiền #NạpTiềnKhôngLênĐiểm #BịKhóaTàiKhoản #SaiThôngTinHọTên #MấtTiền #MấtĐiểmSố #BịHackTàiKhoản #BảoMậtThôngTin #VàoSaiLink #LinkChínhThức #HỗTrợKháchHàng #GiảiQuyếtVấnĐề
                 
                 **CẤU TRÚC BÀI VIẾT MẪU:**
                 🎯 [Từ khóa] - NỀN TẢNG GIẢI TRÍ ĐỈNH CAO 2025
@@ -372,6 +425,10 @@ class AIContentWriter:
                 ✅ [Tính năng 1]
                 ✅ [Tính năng 2]
                 
+                🚨 **HỖ TRỢ KHẨN CẤP - GIẢI QUYẾT NGAY:**
+                🔸 [Vấn đề 1 + giải pháp]
+                🔸 [Vấn đề 2 + giải pháp]
+                
                 🎁 **ƯU ĐÃI ĐẶC BIỆT:**
                 ⭐ [Ưu đãi 1]
                 ⭐ [Ưu đãi 2]
@@ -383,13 +440,16 @@ class AIContentWriter:
                 
                 💫 [Lời kêu gọi hành động]
                 
+                🔒 **LƯU Ý QUAN TRỌNG:**
+                • CHỈ sử dụng link chính thức: {source}
+                
                 [Hashtag]
                 """
             
             response = self.client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "Bạn là chuyên gia content marketing SEO cho lĩnh vực giải trí trực tuyến. Bạn cực kỳ giỏi trong việc tạo nội dung thu hút mà không vi phạm chính sách. LUÔN tuân thủ cấu trúc và thông tin liên hệ cố định được cung cấp."},
+                    {"role": "system", "content": "Bạn là chuyên gia content marketing SEO cho lĩnh vực giải trí trực tuyến. Bạn cực kỳ giỏi trong việc tạo nội dung thu hút mà không vi phạm chính sách. LUÔN tuân thủ cấu trúc và thông tin liên hệ cố định được cung cấp. ĐẶC BIỆT tập trung vào các vấn đề hỗ trợ khách hàng và nhấn mạnh link chính thức."},
                     {"role": "user", "content": custom_prompt}
                 ],
                 max_tokens=1500,
