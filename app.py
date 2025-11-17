@@ -7,6 +7,7 @@ import re
 import random
 import uuid
 import requests
+import io
 from collections import Counter
 from datetime import datetime, timedelta
 from flask import Flask, Response, jsonify, make_response, request, send_from_directory
@@ -355,7 +356,7 @@ class AIContentWriter:
                 - Tự nhiên, không spam, không cảm giác quảng cáo quá lố
                 
                 **HASHTAG (QUAN TRỌNG):**
-                BẮT BUỐC phải có 6 hashtag chính với từ khóa "{keyword}":
+                BẮT BUỘC phải có 6 hashtag chính với từ khóa "{keyword}":
                 #{keyword} #LinkChínhThức{keyword} #{keyword}AnToàn #HỗTrợLấyLạiTiền{keyword} #RútTiền{keyword} #MởKhóaTàiKhoản{keyword}
                 
                 Và thêm 10-15 hashtag phụ liên quan đến giải trí, game, casino online.
@@ -1472,6 +1473,57 @@ Ví dụ:
     }
   }
 
+  // Export CSV functionality
+  async function exportSettingsCSV() {
+    try {
+      const response = await fetch('/api/settings/export');
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'settings.csv';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        $('#settings_status').textContent = '✅ Đã xuất file CSV';
+      } else {
+        const error = await response.json();
+        $('#settings_status').textContent = `Lỗi export: ${error.error}`;
+      }
+    } catch (error) {
+      $('#settings_status').textContent = `Lỗi: ${error.message}`;
+    }
+  }
+
+  // Import CSV functionality
+  async function importSettingsCSV(file) {
+    if (!file) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/settings/import', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        $('#settings_status').textContent = `Lỗi import: ${data.error}`;
+      } else {
+        $('#settings_status').textContent = `✅ Đã import ${data.imported} settings từ CSV`;
+        // Reload settings
+        loadSettings();
+      }
+    } catch (error) {
+      $('#settings_status').textContent = `Lỗi: ${error.message}`;
+    }
+  }
+
   // Analytics functionality
   async function loadAnalytics() {
     try {
@@ -1532,6 +1584,22 @@ Ví dụ:
     }
   }
 
+  // Clear cache functionality
+  async function clearCache() {
+    try {
+      const response = await fetch('/api/admin/clear_cache', { method: 'POST' });
+      const data = await response.json();
+      
+      if (data.error) {
+        $('#admin_status').textContent = `Lỗi: ${data.error}`;
+      } else {
+        $('#admin_status').textContent = '✅ Đã xoá cache hệ thống';
+      }
+    } catch (error) {
+      $('#admin_status').textContent = `Lỗi: ${error.message}`;
+    }
+  }
+
   // Event listeners
   document.addEventListener('DOMContentLoaded', function() {
     // Load initial data
@@ -1545,6 +1613,8 @@ Ví dụ:
       const item = e.target.closest('.conv-item');
       if (item) {
         const index = parseInt(item.getAttribute('data-index'));
+        window.currentConversationIndex = index;
+        window.currentConversation = window.conversationsData[index];
         loadConversationMessages(index);
       }
     });
@@ -1629,6 +1699,12 @@ Ví dụ:
 
     // Settings events
     $('#btn_settings_save')?.addEventListener('click', saveSettings);
+    $('#btn_settings_export')?.addEventListener('click', exportSettingsCSV);
+    $('#settings_import')?.addEventListener('change', (e) => {
+      importSettingsCSV(e.target.files[0]);
+      e.target.value = ''; // Reset file input
+    });
+    $('#btn_clear_cache')?.addEventListener('click', clearCache);
 
     // Admin events
     $('#btn_refresh_pages')?.addEventListener('click', () => {
@@ -1989,7 +2065,14 @@ def api_inbox_reply():
 def api_ai_generate():
     """API tạo nội dung bằng AI với SEO tối ưu - ĐÃ CẢI THIỆN PROMPT"""
     try:
+        # Kiểm tra content type
+        if not request.is_json:
+            return jsonify({"error": "Content-Type phải là application/json"}), 400
+            
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "Dữ liệu JSON không hợp lệ"}), 400
+            
         page_id = data.get("page_id")
         user_prompt = (data.get("prompt") or "").strip()
         
@@ -2052,7 +2135,14 @@ def api_ai_generate():
 def api_pages_post():
     """API đăng bài lên pages với tracking"""
     try:
+        # Kiểm tra JSON
+        if not request.is_json:
+            return jsonify({"error": "Content-Type phải là application/json"}), 400
+            
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "Dữ liệu JSON không hợp lệ"}), 400
+            
         pages = data.get("pages", [])
         text_content = (data.get("text") or "").strip()
         media_url = (data.get("media_url") or "").strip() or None
@@ -2081,45 +2171,62 @@ def api_pages_post():
                 post_result = None
                 post_id = None
                 
+                print(f"📤 Đang đăng bài cho page {pid}...")
+                print(f"📝 Nội dung: {text_content[:100]}...")
+                print(f"🖼️ Media URL: {media_url}")
+                print(f"📋 Post type: {post_type}")
+                
                 if media_url and post_type == "reels":
                     # Đăng video/reels
+                    print("🎥 Đăng Reels video...")
                     post_result = fb_post(f"{pid}/videos", {
                         "file_url": media_url,
                         "description": text_content,
                         "access_token": token
                     })
                     post_id = post_result.get("id")
+                    print(f"✅ Reels posted: {post_id}")
                     
                 elif media_url:
                     # Đăng ảnh
+                    print("🖼️ Đăng ảnh...")
                     post_result = fb_post(f"{pid}/photos", {
                         "url": media_url,
                         "message": text_content,
                         "access_token": token
                     })
                     post_id = post_result.get("post_id") or post_result.get("id")
+                    print(f"✅ Photo posted: {post_id}")
                     
                 else:
                     # Đăng text
+                    print("📝 Đăng text...")
                     post_result = fb_post(f"{pid}/feed", {
                         "message": text_content,
                         "access_token": token
                     })
                     post_id = post_result.get("id")
+                    print(f"✅ Text posted: {post_id}")
                 
-                # Tạo link bài đăng
+                # Tạo link bài đăng - FIX HOÀN TOÀN
                 link = None
                 if post_id:
                     # Xử lý post_id
-                    if "_" in str(post_id):
-                        post_id_parts = str(post_id).split("_")
+                    post_id_str = str(post_id)
+                    if "_" in post_id_str:
+                        # Nếu post_id có dạng "pageid_postid"
+                        post_id_parts = post_id_str.split("_")
                         if len(post_id_parts) > 1:
-                            post_id = post_id_parts[1]
+                            clean_post_id = post_id_parts[1]
+                        else:
+                            clean_post_id = post_id_str
+                    else:
+                        clean_post_id = post_id_str
                     
                     if post_type == "reels":
-                        link = f"https://facebook.com/{pid}/reels/{post_id}"
+                        link = f"https://facebook.com/{pid}/reels/{clean_post_id}"
                     else:
-                        link = f"https://facebook.com/{pid}/posts/{post_id}"
+                        link = f"https://facebook.com/{pid}/posts/{clean_post_id}"
                 
                 results.append({
                     "page_id": pid,
@@ -2131,9 +2238,11 @@ def api_pages_post():
                 
                 # Theo dõi thành công
                 analytics_tracker.track_post(pid, post_type, success=True)
+                print(f"✅ Bài đăng thành công: {link}")
                 
             except Exception as e:
                 error_msg = str(e)
+                print(f"❌ Lỗi đăng bài page {pid}: {error_msg}")
                 results.append({
                     "page_id": pid,
                     "error": error_msg,
@@ -2147,11 +2256,12 @@ def api_pages_post():
         return jsonify({"results": results})
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"❌ Lỗi hệ thống đăng bài: {e}")
+        return jsonify({"error": f"Lỗi hệ thống: {str(e)}"}), 500
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
-    """API upload file - ĐÃ SỬA LỖI"""
+    """API upload file - FIX HOÀN TOÀN"""
     try:
         if 'file' not in request.files:
             return jsonify({"error": "Không có file"}), 400
@@ -2177,9 +2287,21 @@ def api_upload():
         # Lưu file
         file.save(filepath)
         
-        # Tạo URL
-        base_url = request.host_url.rstrip('/')
+        # Kiểm tra file đã được lưu
+        if not os.path.exists(filepath):
+            return jsonify({"error": "Lỗi lưu file"}), 500
+        
+        # Tạo URL - FIX: Sử dụng base URL chính xác
+        if request.host_url:
+            base_url = request.host_url.rstrip('/')
+        else:
+            base_url = "https://aktpage.onrender.com"  # Fallback URL
+        
         file_url = f"{base_url}/uploads/{filename}"
+        
+        print(f"✅ File uploaded: {filename}")
+        print(f"📁 Path: {filepath}")
+        print(f"🔗 URL: {file_url}")
         
         return jsonify({
             "success": True,
@@ -2189,6 +2311,7 @@ def api_upload():
         })
         
     except Exception as e:
+        print(f"❌ Upload error: {e}")
         return jsonify({"error": f"Lỗi upload: {str(e)}"}), 500
 
 @app.route("/uploads/<filename>")
@@ -2255,7 +2378,13 @@ def api_settings_get():
 def api_settings_save():
     """API lưu cài đặt"""
     try:
+        if not request.is_json:
+            return jsonify({"error": "Content-Type phải là application/json"}), 400
+            
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "Dữ liệu JSON không hợp lệ"}), 400
+            
         items = data.get("items", [])
         
         settings = _load_settings()
@@ -2274,6 +2403,85 @@ def api_settings_save():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/settings/export", methods=["GET"])
+def api_settings_export():
+    """API export cài đặt ra CSV"""
+    try:
+        settings = _load_settings()
+        output = []
+        
+        for pid in PAGE_TOKENS.keys():
+            page_settings = settings.get(pid, {})
+            # Lấy tên page thật
+            page_name = f"Page {pid}"
+            token = PAGE_TOKENS.get(pid)
+            if token and token.startswith("EAA"):
+                try:
+                    page_data = fb_get(pid, {
+                        "access_token": token,
+                        "fields": "name"
+                    })
+                    page_name = page_data.get("name", page_name)
+                except:
+                    pass
+                    
+            output.append({
+                "page_id": pid,
+                "page_name": page_name,
+                "keyword": page_settings.get("keyword", ""),
+                "source": page_settings.get("source", "")
+            })
+        
+        # Tạo file CSV trong bộ nhớ
+        si = io.StringIO()
+        cw = csv.writer(si)
+        cw.writerow(["page_id", "page_name", "keyword", "source"])
+        for row in output:
+            cw.writerow([row["page_id"], row["page_name"], row["keyword"], row["source"]])
+        
+        response = make_response(si.getvalue())
+        response.headers["Content-Disposition"] = "attachment; filename=settings.csv"
+        response.headers["Content-type"] = "text/csv"
+        return response
+        
+    except Exception as e:
+        return jsonify({"error": f"Lỗi export CSV: {str(e)}"}), 500
+
+@app.route("/api/settings/import", methods=["POST"])
+def api_settings_import():
+    """API import cài đặt từ CSV"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Không có file"}), 400
+            
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "Không có file được chọn"}), 400
+            
+        if not file.filename.endswith('.csv'):
+            return jsonify({"error": "File phải có định dạng CSV"}), 400
+
+        # Đọc file CSV
+        stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+        csv_reader = csv.DictReader(stream)
+        settings = _load_settings()
+        count = 0
+        
+        for row in csv_reader:
+            page_id = row.get("page_id")
+            if page_id and page_id in PAGE_TOKENS:
+                settings[page_id] = {
+                    "keyword": row.get("keyword", ""),
+                    "source": row.get("source", "")
+                }
+                count += 1
+                
+        _save_settings(settings)
+        return jsonify({"ok": True, "imported": count})
+        
+    except Exception as e:
+        return jsonify({"error": f"Lỗi import CSV: {str(e)}"}), 500
 
 # ------------------------ Analytics APIs ------------------------
 
@@ -2327,9 +2535,16 @@ def api_analytics_clear():
 
 @app.route("/api/seo/analyze", methods=["POST"])
 def api_seo_analyze():
-    """API phân tích SEO content"""
+    """API phân tích SEO content - ĐÃ FIX LỖI JSON"""
     try:
+        # Kiểm tra content type
+        if not request.is_json:
+            return jsonify({"error": "Content-Type phải là application/json"}), 400
+            
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "Dữ liệu JSON không hợp lệ"}), 400
+            
         content = data.get("content", "")
         
         if not content:
@@ -2408,13 +2623,19 @@ def api_seo_analyze():
         })
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Lỗi phân tích SEO: {str(e)}"}), 500
 
 @app.route("/api/seo/hashtags", methods=["POST"])
 def api_seo_hashtags():
     """API tạo hashtag SEO"""
     try:
+        if not request.is_json:
+            return jsonify({"error": "Content-Type phải là application/json"}), 400
+            
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "Dữ liệu JSON không hợp lệ"}), 400
+            
         keyword = (data.get("keyword") or "").strip()
         
         if not keyword:
@@ -2432,23 +2653,11 @@ def api_seo_hashtags():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ------------------------ Error Handlers ------------------------
-
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({"error": "Endpoint không tồn tại"}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({"error": "Lỗi máy chủ nội bộ"}), 500
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    return jsonify({"error": f"Lỗi hệ thống: {str(e)}"}), 500
+# ------------------------ Admin APIs ------------------------
 
 @app.route("/api/admin/test_tokens", methods=["POST"])
 def api_test_tokens():
-    """API test tokens - CHỨC NĂNG MỚI"""
+    """API test tokens"""
     try:
         results = []
         for pid, token in PAGE_TOKENS.items():
@@ -2479,6 +2688,41 @@ def api_test_tokens():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/admin/clear_cache", methods=["POST"])
+def api_clear_cache():
+    """API xoá cache hệ thống"""
+    try:
+        # Xoá corpus cache
+        if os.path.exists(CORPUS_FILE):
+            os.remove(CORPUS_FILE)
+            
+        # Xoá settings cache (không xoá file, chỉ reset dict)
+        # Giữ nguyên settings thực tế
+        
+        # Xoá analytics cache
+        analytics_file = "/tmp/analytics.json"
+        if os.path.exists(analytics_file):
+            os.remove(analytics_file)
+            
+        return jsonify({"ok": True, "message": "Đã xoá cache hệ thống"})
+        
+    except Exception as e:
+        return jsonify({"error": f"Lỗi xoá cache: {str(e)}"}), 500
+
+# ------------------------ Error Handlers ------------------------
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Endpoint không tồn tại"}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Lỗi máy chủ nội bộ"}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    return jsonify({"error": f"Lỗi hệ thống: {str(e)}"}), 500
+
 # ------------------------ Main ------------------------
 
 if __name__ == "__main__":
@@ -2506,6 +2750,11 @@ if __name__ == "__main__":
     print("   • 4 danh mục template: Khuyến mãi, Bảo mật, Game, Mobile")
     print("   • Prompt tuỳ chỉnh linh hoạt")
     print("   • Lưu template vào local storage")
+    print("=" * 60)
+    print("🔄 Export/Import Features:")
+    print("   • Xuất settings ra CSV")
+    print("   • Nhập settings từ CSV")
+    print("   • Xoá cache hệ thống")
     print("=" * 60)
     print("🔗 URLs:")
     print(f"   • Main: http://0.0.0.0:{port}")
